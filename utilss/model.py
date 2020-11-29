@@ -37,6 +37,7 @@ def custom_prior_fn(dtype, shape, name, trainable,
 def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window = 3, alpha=2, beta=2, gamma=1,
                  load = True, verbose = 0, model_name ='dSurv_history.pkl', batch_size = 256, layers = 10):
 
+    print('fit propensity')
     train_gen = DataGenerator_p(data, batch_size= int(batch_size/4))
     val_gen = DataGenerator_p(val_data, batch_size= int(batch_size/4))
 
@@ -54,6 +55,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     early_stopping = EarlyStopping(monitor='loss', patience=2)
     model_p.fit(train_gen, validation_data=val_gen, epochs=100, callbacks=[early_stopping], verbose=0)
 
+    print('fit main model')
 
     train_gen = DataGenerator(data, batch_size=batch_size)
     val_gen = DataGenerator(val_data, batch_size=batch_size)
@@ -126,7 +128,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     else:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_weights_only=True, verbose=0)
         early_stopping = EarlyStopping(monitor='loss', patience=2)
-        history = model.fit(train_gen,validation_data=val_gen,epochs=5,
+        history = model.fit(train_gen,validation_data=val_gen,epochs=100,
                             callbacks=[early_stopping,cp_callback, TqdmCallback(verbose=verbose)], verbose=0)
 
         history_dict = history.history
