@@ -221,11 +221,12 @@ def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perpr
         modelDsurv_result = np.array(res['modelDsurv_result'])
     else:
         # Model fitting lstm model with censor loss
-        modelDsurv, history_dict = create_model(rnn_x.shape[2], max_time, history_itvl, data, val_data, lstm_window= 6,
-                                                alpha=2,
-                                                beta= 0.5, gamma=0.5, load=load, verbose=0, model_name=model_name,
+        modelDsurv,model_p, history_dict = create_model(rnn_x.shape[2], max_time, history_itvl, data, val_data, lstm_window= 6,
+                                                alpha=1.5,beta= 1, gamma=0.5, load=load, verbose=0, model_name=model_name,
                                                 batch_size=2056, layers=30)
         modelDsurv_result = get_counterfactuals(modelDsurv, pred_data, t=0, draw=10, test_data=test_data)
+
+        propensity_cdsm = model_p([pred_rnn_x, pred_rnn_m])[:,0]
 
 
         np.save('saved_models/' + model_path + '.npy', {'modelDsurv_result': modelDsurv_result})
@@ -348,6 +349,46 @@ def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perpr
 
 
 
+    def gradient_importance(data,pred_time, model, tp = 0, propensity = True):
+        rnn_x, rnn_m, rnn_s, rnn_y, _ = data
+        if propensity:
+            rnn_x = rnn_x[:,:,1:]
+            rnn_m = rnn_m[:,:,1:]
+
+        rnn_m0 = rnn_m.copy()
+        rnn_m0[rnn_x[:, 0, 0] != 0, :, :] = -1
+        rnn_m1 = rnn_m.copy()
+        rnn_m1[rnn_x[:, 0, 0] != 1, :, :] = -1
+
+        x = tf.convert_to_tensor( rnn_x[pred_time == tp], name= 'x')
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            #predictions = model([x, rnn_m[pred_time == tp], rnn_m0[pred_time == tp],
+            #                     rnn_m1[pred_time == tp], rnn_s[pred_time == tp]])
+            predictions = model([x, rnn_m[pred_time == tp]])
+        grads = tape.gradient(predictions, x) #dy/dx
+        grads = tf.reduce_mean(grads, axis=1).numpy()[0]
+        return grads
+
+    grads = gradient_importance(pred_data, pred_time, model = model_p, tp = 0)
+    var_name = Colnames.copy()[1:]
+    #var_name[0] = 'NOAC'
+    plt_df = pd.DataFrame(var_name)
+    plt_df['grads'] = grads
+    plt_df.columns = ['x', 'grads']
+    plt_df = plt_df.sort_values(['grads'], ascending = False)
+    plt_df = plt_df[plt_df.x != 'vka']
+    plt_df.x = plt_df.x.str.replace('_count','')
+    plt_df.x = plt_df.x.str.replace('_',' ')
+    plt_df.x = plt_df.x.str.upper()
+    sns.set(style="whitegrid", font_scale=1)
+    fig, ax = plt.subplots(figsize=(7, 10))
+    sns.barplot(x=plt_df.grads, y=plt_df.x, palette='vlag' )
+    ax.set_xlabel("Covariates", fontsize=11, fontweight='bold')
+    ax.set_xlabel("Gradients", fontsize=11, fontweight='bold')
+    plt.savefig("plots/"+model_path+"_grads.png", bbox_inches='tight', pad_inches=0.5, dpi=500)
+    plt.show()
+
 
     from scipy.stats import ttest_ind
     obs_negative = pd.DataFrame(pred_rnn_x[pred_time==0][:,0,:][np.mean(cf_durv,1)<0], columns=Colnames)
@@ -395,7 +436,7 @@ len(np.unique(df[((df.A==1) & (df.Y== 1))]['patnumber']))/len(np.unique(df[((df.
 
 obs_result, AUROC,concordance,AUROC_test,concordance_test,avg_dist,avg_dist_test, dist_var, \
            dist_var_test, s_durv, cf_durv = AF_model(df, model_name ='cdsm_af.pkl', model_path = 'model_result_af_perprotocal',
-                                                     layers = 26, load = False, build_data = False)
+                                                     layers = 30, load = False, build_data = False)
 
 
 
@@ -409,7 +450,7 @@ len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
 obs_result_mb, AUROC_mb,concordance_mb,AUROC_test_mb,concordance_test_mb,avg_dist_mb,avg_dist_test_mb, dist_var_mb, \
            dist_var_test_mb, s_durv_mb, cf_durv_mb = AF_model(df, model_name ='dSurv_af_mb.pkl', model_path = 'model_result_af_perprotocal_mb',layers = 26,
-                                                              load=False, build_data=True)
+                                                              load=True, build_data=False)
 
 
 
@@ -424,7 +465,7 @@ len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
 obs_result_isse, AUROC_isse,concordance_isse,AUROC_test_isse,concordance_test_isse,avg_dist_isse,avg_dist_test_isse, dist_var_isse, \
            dist_var_test_isse, s_durv_isse, cf_durv_isse = AF_model(df, model_name ='dSurv_af_isse.pkl', model_path = 'model_result_af_perprotocal_isse',layers = 20,
-                                                                    load=False, build_data=True)
+                                                                    load=True, build_data=False)
 
 
 
@@ -439,7 +480,7 @@ len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
 obs_result_isse, AUROC_isse,concordance_isse,AUROC_test_isse,concordance_test_isse,avg_dist_isse,avg_dist_test_isse, dist_var_isse, \
            dist_var_test_isse, s_durv_isse, cf_durv_isse = AF_model(df, model_name ='dSurv_af_death.pkl', model_path = 'model_result_af_perprotocal_death',layers = 25,
-                                                                    load=False, build_data=True)
+                                                                    load=True, build_data=False)
 
 
 
