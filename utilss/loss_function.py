@@ -83,5 +83,36 @@ def prop_likelihood_lrnn(window_size):
         return propensity_loss
     return loss
 
+def surv_likelihood_lrnn_2(window_size, alpha, beta):
+    def loss(y_true, y_pred):
+        # Partial likelihood loss
+        cens_uncens = 1. + y_true[:, 0:window_size] * (y_pred - 1.)  # component for all patients
+        uncens = 1. - y_true[:, window_size:2 * window_size] * y_pred  # component for only uncensored patients
+        loss_1 = K.sum(-K.log(K.clip(K.concatenate((cens_uncens, uncens)), K.epsilon(), None)),
+                       axis=-1)  # return -log likelihood
+
+        # Rank loss
+        R = K.dot(y_pred, K.transpose(y_true[:, 0:window_size]))  # N*N
+        diag_R = K.reshape(tf.linalg.diag_part(R), (-1, 1))  # N*1
+        one_vector = tf.ones(K.shape(diag_R))  # N*1
+        R = K.dot(one_vector, K.transpose(diag_R)) - R  # r_{i}(T_{j}) - r_{j}(T_{j})
+        R = K.transpose(R)  # r_{i}(T_{i}) - r_{j}(T_{i})
+
+        I2 = K.reshape(K.sum(y_true[:, window_size:2 * window_size], axis=1), (-1, 1))  # N*1
+        I2 = K.cast(K.equal(I2, 1), dtype=tf.float32)
+        I2 = K.dot(one_vector, K.reshape(I2,(1,-1)))
+        T2 = K.reshape(K.sum(y_true[:, 0:window_size], axis=1), (-1, 1))  # N*1
+
+        T = K.relu(
+            K.sign(K.dot(one_vector, K.transpose(T2)) - K.dot(T2, K.transpose(one_vector))))  # (Ti(t)>Tj(t)=1); N*N
+        T = I2*T  # only remains T_{ij}=1 when event occured for subject i 1*N
+
+        eta = T * K.exp(-R/0.1)
+        eta = T * K.cast(eta>=T, dtype=tf.float32)
+        loss_2 = 1-K.sum(eta)/(1+K.sum(T))
+
+        return alpha * loss_1 + beta * loss_2
+
+    return loss
 
 
