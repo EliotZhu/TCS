@@ -58,6 +58,9 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     train_gen = DataGenerator(data, batch_size=batch_size)
     val_gen = DataGenerator(val_data, batch_size=batch_size)
 
+    input_x_p = tfkl.Input(shape=(history_itvl, input_dim-1))
+    input_m_p = tfkl.Input(shape=(history_itvl, input_dim-1))
+
     input_x = tfkl.Input(shape=(history_itvl, input_dim))
     input_m = tfkl.Input(shape=(history_itvl, input_dim))
     input_m0 = tfkl.Input(shape=(history_itvl, input_dim))
@@ -81,7 +84,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
         treat_layer = tfkl.Dense(max_time)(treat_layer)
 
     combined_layer = tfkl.concatenate([control_layer, treat_layer])
-    propensity_layer = model_p([input_x, input_m], training=False)
+    propensity_layer = model_p([input_x_p, input_m_p], training=False)
     #combined_layer = ExternalMasking(mask_value=-1)([input_x, input_m])
     combined_layer = tfkl.LSTM(lstm_window, return_sequences=True)(combined_layer)
     combined_layer = tfkl.TimeDistributed(tfkl.Dense(max_time))(combined_layer)
@@ -107,7 +110,8 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     c_x0 = concateDim(max_time, name = 'c0')(c_x0)
 
     combined = tf.stack([c_x1, c_x0, propensity_layer], axis=1)
-    model = tf.keras.Model(inputs=[input_x, input_m, input_s, input_x0, input_x1, input_m0, input_m1], outputs=combined)
+    model = tf.keras.Model(inputs=[input_x_p, input_m_p, input_x, input_m, input_s,
+                                   input_x0, input_x1, input_m0, input_m1], outputs=combined)
     model.compile(loss=surv_likelihood_lrnn(max_time, alpha=alpha, beta=beta, gamma=gamma),
                   optimizer=tf.keras.optimizers.RMSprop(lr=0.001))
 
@@ -149,7 +153,8 @@ def get_counterfactuals(model, data, t = 0, draw = 30, type = "DSurv", test_data
             rnn_m0[rnn_x[:, :, 0] == 0] = -1
             rnn_m1[rnn_x[:, :, 0] == 1] = -1
 
-            y_pred =  [model.predict([rnn_x[time_pt == t], rnn_m[time_pt == t], rnn_s[time_pt == t],
+            y_pred =  [model.predict([rnn_x[time_pt == t,:,1:], rnn_m[time_pt == t,:,1:],
+                                      rnn_x[time_pt == t], rnn_m[time_pt == t], rnn_s[time_pt == t],
                                       rnn_x0[time_pt == t], rnn_x1[time_pt == t], rnn_m0[time_pt == t],rnn_m1[time_pt == t] ], verbose=0) for _ in range(draw)]
 
             y_pred = np.array(y_pred)

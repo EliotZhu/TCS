@@ -474,7 +474,9 @@ class DataGenerator(tf.keras.utils.Sequence):
             # Initialization
             index = np.concatenate([indexes1, indexes0])
 
-            X = [self.rnn_x[index], self.rnn_m[index], self.rnn_s[index], self.rnn_x0[index], self.rnn_x1[index],
+            X = [self.rnn_x[index,:, 1:], self.rnn_m[index,:, 1:],
+                 self.rnn_x[index], self.rnn_m[index], self.rnn_s[index],
+                 self.rnn_x0[index], self.rnn_x1[index],
                  self.rnn_m0[index], self.rnn_m1[index]]
 
             #y_temp = np.concatenate([self.rnn_y[index], self.rnn_x[index, 0:1, 0]], axis=1)
