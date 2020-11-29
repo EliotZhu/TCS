@@ -31,8 +31,6 @@ Colnames = ['patnumber', 'imd2015',
        'Selective Serotonin Re-uptake Inhibitors_count', 'Statins_count',
        'NSAID_count', 'Antiplatelets_count']
 
-print(len(np.unique(AFdata[((AFdata.naive_vka==1))]['patnumber'])))
-
 
 X = AFdata.copy()
 X = X[Colnames]
@@ -40,7 +38,7 @@ np.mean(X,0) == 0
 
 ##########################################################
 # preprocess the data
-def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perprotocal', load = False, build_data = True, layers = 30):
+def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perprotocal', load = False, build_data = True, layers = 30, alpha = 1.8):
     train_idx, validate_idx, test_idx = np.split(df.index, [int(.9 * len(df.index)), int(.99 * len(df.index))])
     train = df.iloc[train_idx]
     val = df.iloc[validate_idx]
@@ -221,13 +219,12 @@ def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perpr
         modelDsurv_result = np.array(res['modelDsurv_result'])
     else:
         # Model fitting lstm model with censor loss
-        modelDsurv,model_p, history_dict = create_model(rnn_x.shape[2], max_time, history_itvl, data, val_data, lstm_window= 6,
-                                                alpha=1.5,beta= 1, gamma=0.5, load=load, verbose=0, model_name=model_name,
+        modelDsurv,model_p, history_dict = create_model(rnn_x.shape[2], max_time, history_itvl, data, val_data, lstm_window= 5,
+                                                alpha= alpha, beta= 0.5, gamma=0.5, load=load, verbose=0, model_name=model_name,
                                                 batch_size=2056, layers=30)
         modelDsurv_result = get_counterfactuals(modelDsurv, pred_data, t=0, draw=10, test_data=test_data)
 
-        propensity_cdsm = model_p([pred_rnn_x, pred_rnn_m])[:,0]
-
+        #propensity_cdsm = model_p([pred_rnn_x, pred_rnn_m])[:,0]
 
         np.save('saved_models/' + model_path + '.npy', {'modelDsurv_result': modelDsurv_result})
 
@@ -337,7 +334,7 @@ def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perpr
     # s_u_durv = s_durv + 1.96*y_pred_std/np.sqrt(len(cf_std_1))
 
 
-    idx_kernal = pd.DataFrame(pred_rnn_x[pred_time==0][:,0,:].reshape(-1,54), columns=Colnames)
+    idx_kernal = pd.DataFrame(pred_rnn_x[pred_time==0][:,0,:].reshape(-1,rnn_x.shape[2]), columns=Colnames)
     sns.set(style="whitegrid", font_scale=1)
     fig, ax = plt.subplots(figsize=(7, 7))
     sns.kdeplot(np.mean(cf_durv[idx_kernal.patnumber == 1, :],1), alpha = 0.3, label="NOAC", fill = True, color = "#8DBFC5")
@@ -434,9 +431,7 @@ df = df[~pd.isna(df.Y)].reset_index(drop = True)
 len(np.unique(df[((df.A==0) & (df.Y== 1))]['patnumber']))/len(np.unique(df[((df.A==0))]['patnumber']))
 len(np.unique(df[((df.A==1) & (df.Y== 1))]['patnumber']))/len(np.unique(df[((df.A==1))]['patnumber']))
 
-obs_result, AUROC,concordance,AUROC_test,concordance_test,avg_dist,avg_dist_test, dist_var, \
-           dist_var_test, s_durv, cf_durv = AF_model(df, model_name ='cdsm_af.pkl', model_path = 'model_result_af_perprotocal',
-                                                     layers = 30, load = False, build_data = False)
+AF_model(df, model_name ='cdsm_af.pkl', model_path = 'model_result_af_perprotocal', load = False, build_data = True)
 
 
 
@@ -448,9 +443,8 @@ df = pd.concat([Y,T,A,X],axis=1).reset_index(drop = True)
 len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
-obs_result_mb, AUROC_mb,concordance_mb,AUROC_test_mb,concordance_test_mb,avg_dist_mb,avg_dist_test_mb, dist_var_mb, \
-           dist_var_test_mb, s_durv_mb, cf_durv_mb = AF_model(df, model_name ='dSurv_af_mb.pkl', model_path = 'model_result_af_perprotocal_mb',layers = 26,
-                                                              load=True, build_data=False)
+AF_model(df, model_name ='dSurv_af_mb.pkl', model_path = 'model_result_af_perprotocal_mb',layers = 26,
+                                                              load=False, build_data=True)
 
 
 
@@ -463,9 +457,8 @@ df = pd.concat([Y,T,A,X],axis=1).reset_index(drop = True)
 len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
-obs_result_isse, AUROC_isse,concordance_isse,AUROC_test_isse,concordance_test_isse,avg_dist_isse,avg_dist_test_isse, dist_var_isse, \
-           dist_var_test_isse, s_durv_isse, cf_durv_isse = AF_model(df, model_name ='dSurv_af_isse.pkl', model_path = 'model_result_af_perprotocal_isse',layers = 20,
-                                                                    load=True, build_data=False)
+AF_model(df, model_name ='dSurv_af_isse.pkl', model_path = 'model_result_af_perprotocal_isse',layers = 20,
+                                                                    load=False, build_data=True)
 
 
 
@@ -478,9 +471,8 @@ len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
 
-obs_result_isse, AUROC_isse,concordance_isse,AUROC_test_isse,concordance_test_isse,avg_dist_isse,avg_dist_test_isse, dist_var_isse, \
-           dist_var_test_isse, s_durv_isse, cf_durv_isse = AF_model(df, model_name ='dSurv_af_death.pkl', model_path = 'model_result_af_perprotocal_death',layers = 25,
-                                                                    load=True, build_data=False)
+AF_model(df, model_name ='dSurv_af_death.pkl', model_path = 'model_result_af_perprotocal_death',layers = 25,
+                                                                    load=False, build_data=True)
 
 
 
