@@ -1,26 +1,24 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+import seaborn as sns
 import tensorflow as tf
-
-from utilss.data_handler import LDataSimu, build_data_surv_rnn, arr_to_xmd
-from utilss.model import create_model, get_counterfactuals, benchmark_algorithms
-from utilss.Evaluations import custom_auc, get_concordance
 from joblib import Parallel, delayed
 from scipy.optimize import minimize
 
+from utilss.Evaluations import custom_auc, get_concordance
+from utilss.data_handler import arr_to_xmd
+from utilss.model import create_model, get_counterfactuals, benchmark_algorithms
 
 AFdata = pd.read_csv('dataset/af_vka_vs_noac.csv')
-AFdata = AFdata.sort_values(by=['patnumber', 'follow_up']).reset_index(drop = True)
+AFdata = AFdata.sort_values(by=['patnumber', 'follow_up']).reset_index(drop=True)
 Colnames = ['patnumber', 'imd2015',
-       'age', 'appendage_occlusion', 'cardioversion', 'ablation', 'paroxysmal',
-       'persistent_chronic', 'timefromdiagnosis', 'esrf_count',
-       'mi_count', 'chf_count', 'pvd_count', 'cvd_count', 'dem_count',
-       'copd_count', 'rhe_count', 'giu_count', 'liv_m_count', 'dtm_u_count',
-       'dtm_c_count', 'hp_count', 'ckd_count', 'can_count', 'can_met_count',
-       'liv_s_count', 'aids_count', 'charlson_index_2y', 'female',
+            'age', 'appendage_occlusion', 'cardioversion', 'ablation', 'paroxysmal',
+            'persistent_chronic', 'timefromdiagnosis', 'esrf_count',
+            'mi_count', 'chf_count', 'pvd_count', 'cvd_count', 'dem_count',
+            'copd_count', 'rhe_count', 'giu_count', 'liv_m_count', 'dtm_u_count',
+            'dtm_c_count', 'hp_count', 'ckd_count', 'can_count', 'can_met_count',
+            'liv_s_count', 'aids_count', 'charlson_index_2y', 'female',
        'hyp_count', 'stroke_count', 'chadvasc_index_2y', 'bleed_count',
        'l_inr_count', 'alch_count', 'hasbled_index_2y',
        'Pacemaker system procedures_count', 'Antiarrythmics_count',
@@ -413,14 +411,13 @@ def AF_model(df, model_name ='dSurv_af.pkl', model_path = 'model_result_af_perpr
         {AUROC, concordance, AUROC_test, concordance_test, avg_dist, avg_dist_test, dist_var, \
          dist_var_test})])
     result = pd.concat([result, obs_result])
-    result.to_csv("results/"+model_path+".csv")
-    pd.DataFrame(cf_durv).to_csv("results/cf_durv_"+model_path+".csv")
-    pd.DataFrame(cf_l_durv).to_csv("results/cf_l_durv_"+model_path+".csv")
-    pd.DataFrame(cf_u_durv).to_csv("results/cf_u_durv_"+model_path+".csv")
+    result.to_csv("results/" + model_path + ".csv")
+    pd.DataFrame(cf_durv).to_csv("results/cf_durv_" + model_path + ".csv")
+    pd.DataFrame(cf_l_durv).to_csv("results/cf_l_durv_" + model_path + ".csv")
+    pd.DataFrame(cf_u_durv).to_csv("results/cf_u_durv_" + model_path + ".csv")
 
-
-    return obs_result, AUROC,concordance,AUROC_test,concordance_test,avg_dist,avg_dist_test, dist_var, \
-           dist_var_test, s_durv, cf_durv
+    # return obs_result, AUROC,concordance,AUROC_test,concordance_test,avg_dist,avg_dist_test, dist_var, \
+    #       dist_var_test, s_durv, cf_durv
 
 
 Y = pd.DataFrame(np.sum(AFdata[['mb_sw_dc', 'isse_sw_dc', 'death_sw_dc']].copy(), axis=1) >0 ,columns=['Y']) * 1.0
@@ -443,8 +440,7 @@ df = pd.concat([Y,T,A,X],axis=1).reset_index(drop = True)
 len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
-AF_model(df, model_name ='dSurv_af_mb.pkl', model_path = 'model_result_af_perprotocal_mb',layers = 26,
-                                                              load=False, build_data=True)
+AF_model(df, model_name='dSurv_af_mb.pkl', model_path='model_result_af_perprotocal_mb', alpha=1.45)
 
 
 
@@ -457,8 +453,7 @@ df = pd.concat([Y,T,A,X],axis=1).reset_index(drop = True)
 len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
-AF_model(df, model_name ='dSurv_af_isse.pkl', model_path = 'model_result_af_perprotocal_isse',layers = 20,
-                                                                    load=False, build_data=True)
+AF_model(df, model_name='dSurv_af_isse.pkl', model_path='model_result_af_perprotocal_isse', layers=20, alpha=1.25)
 
 
 
@@ -470,15 +465,4 @@ df = pd.concat([Y,T,A,X],axis=1).reset_index(drop = True)
 len(np.unique(df[(df.Y==1) & (df.A==0)]['patnumber']))
 len(np.unique(df[(df.Y==1) & (df.A==1)]['patnumber']))
 
-
-AF_model(df, model_name ='dSurv_af_death.pkl', model_path = 'model_result_af_perprotocal_death',layers = 25,
-                                                                    load=False, build_data=True)
-
-
-
-
-
-
-
-
-
+AF_model(df, model_name='dSurv_af_death.pkl', model_path='model_result_af_perprotocal_death', alpha=1.25)
