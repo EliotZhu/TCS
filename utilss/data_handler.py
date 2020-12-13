@@ -103,8 +103,8 @@ def LDataSimu(sampleSize=500, max_time=50, simu_dim=10, scale=1, seed=np.random.
 
         def hazard(t, x_i, a_i, lamda_t=max_time * scale):
             beta0 = 1.0
-            beta_e_1 = 0.1
-            beta_e_2 = 0.1
+            beta_e_1 = 0.2
+            beta_e_2 = 0.2
             firstcut = int(np.round(x_i.shape[0]) / 2)
             x = x_i  # x_t(t, x_i)
             if t == 0:
@@ -382,10 +382,8 @@ def build_data_surv_rnn(train, score = None, history_itvl=14, prediction_itvl=7,
     assert Time.shape[0] == rnn_y.shape[0], 'Output dimension not match'
     assert Event.shape[0] == rnn_y.shape[0], 'Output dimension not match'
 
-    idx = np.random.choice(rnn_m.shape[0], int(rnn_m.shape[0] * 0.9), replace=False)
-    idx_train = np.in1d(range(rnn_m.shape[0]), idx)
 
-    return rnn_x, rnn_m, rnn_s, rnn_y, ID, Time, Event, idx_train, rnn_utility
+    return rnn_x, rnn_m, rnn_s, rnn_y, ID, Time, Event, rnn_utility
 
 
 def dataset_normalize(_dataset, all_x_add):

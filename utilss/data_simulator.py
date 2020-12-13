@@ -10,10 +10,10 @@ from utilss.data_handler import LDataSimu, build_data_surv_rnn
 # Data Simulation
 def get_data(input_dim=10, sampleSize=1000, max_time=30, prediction_itvl=1, history_itvl=14, overlap=1,  seed=1123, std = 1):
     df, df_full, surv_func_wrapper = LDataSimu(sampleSize=sampleSize, max_time=max_time,
-                                               simu_dim=input_dim, scale= 1.5, overlap = overlap,
+                                               simu_dim=input_dim, scale= 2, overlap = overlap,
                                                seed=np.random.seed(seed), plot=False, std = std)
     id_set = np.unique(df['0'])
-    train_id, validate_id, test_id = np.split(id_set, [int(.6 * len(id_set)), int(.8 * len(id_set))])
+    train_id, validate_id, test_id = np.split(id_set, [int(.7 * len(id_set)), int(.9 * len(id_set))])
     train_idx = df['0'].isin(train_id)
     validate_idx =  df['0'].isin(validate_id)
     test_idx = df['0'].isin(test_id)
@@ -49,13 +49,13 @@ def get_data(input_dim=10, sampleSize=1000, max_time=30, prediction_itvl=1, hist
     val_stat = preprocess_data(val.copy())
     test_stat = preprocess_data(test.copy())
 
-    rnn_x, rnn_m, rnn_s, rnn_y, ID, Time, Event, _, _ = \
+    rnn_x, rnn_m, rnn_s, rnn_y, ID, Time, Event, _= \
         build_data_surv_rnn(train.copy(), score = None, history_itvl=history_itvl, prediction_itvl=prediction_itvl, max_time=max_time)
 
-    rnn_x_val, rnn_m_val, rnn_s_val, rnn_y_val, ID_val, Time_val, Event_val, _,_  = \
+    rnn_x_val, rnn_m_val, rnn_s_val, rnn_y_val, ID_val, Time_val, Event_val, _  = \
         build_data_surv_rnn(val.copy(), score=None, history_itvl=history_itvl, prediction_itvl=prediction_itvl, max_time=max_time)
 
-    rnn_x_test, rnn_m_test, rnn_s_test, rnn_y_test, ID_test, Time_test, Event_test, _,_  = \
+    rnn_x_test, rnn_m_test, rnn_s_test, rnn_y_test, ID_test, Time_test, Event_test, _ = \
         build_data_surv_rnn(test.copy(), score=None, history_itvl=history_itvl, prediction_itvl=prediction_itvl, max_time=max_time)
 
     rnn_x[np.isnan(rnn_x)] = 0
@@ -67,4 +67,6 @@ def get_data(input_dim=10, sampleSize=1000, max_time=30, prediction_itvl=1, hist
     test_data = [rnn_x_test, rnn_m_test, rnn_s_test, rnn_y_test, Time_test]
 
 
-    return data, val_data, test_data, train_stat, val_stat, test_stat,surv_func_wrapper, train_full, val_full, test_full
+    return data, val_data, test_data, train_stat, val_stat, test_stat,surv_func_wrapper, train_full, val_full, test_full,\
+           train
+

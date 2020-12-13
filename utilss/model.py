@@ -38,8 +38,8 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
                  load = True, verbose = 0, model_name ='dSurv_history.pkl', batch_size = 256, layers = 10):
 
     print('fit propensity')
-    train_gen = DataGenerator_p(data, batch_size= int(batch_size/4))
-    val_gen = DataGenerator_p(val_data, batch_size= int(batch_size/4))
+    train_gen = DataGenerator_p(data, batch_size= int(batch_size/2))
+    val_gen = DataGenerator_p(val_data, batch_size= int(batch_size/2))
 
     input_x = tfkl.Input(shape=(history_itvl, input_dim-1))
     input_m = tfkl.Input(shape=(history_itvl, input_dim-1))
@@ -49,6 +49,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     propensity_layer = tfkl.TimeDistributed(tfkl.Dense(max_time))(propensity_layer)
     for i in range(3):
         propensity_layer = tfkl.Dense(max_time)(propensity_layer)
+        propensity_layer = tfkl.Dropout(0.1)(propensity_layer)
     propensity_layer = concateDim(max_time, name = 'propensity_layer')(propensity_layer)
     model_p = tf.keras.Model(inputs=[input_x, input_m], outputs=propensity_layer)
     model_p.compile(loss= prop_likelihood_lrnn(window_size = max_time), optimizer=tf.keras.optimizers.RMSprop(lr=0.01))
@@ -94,19 +95,17 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     for i in range(layers):
         combined_layer = tfkl.Dense(max_time)(combined_layer)
 
-    c_x1 = ExternalMasking(mask_value=-1)([input_x1, input_m0])
+
+    c_x1 = tfkl.Dense(max_time)(combined_layer)
     c_x1 = tfkl.LSTM(lstm_window, return_sequences=True)(c_x1)
     c_x1 = tfkl.TimeDistributed(tfkl.Dense(max_time))(c_x1)
-    c_x1 = tfkl.concatenate([combined_layer, c_x1])
     for i in range(layers):
         c_x1 = tfkl.Dense(max_time)(c_x1)
     c_x1 = concateDim(max_time, name = 'c1')(c_x1)
 
-
-    c_x0 = ExternalMasking(mask_value=-1)([input_x0, input_m1])
+    c_x0 =tfkl.Dense(max_time)(combined_layer)
     c_x0 = tfkl.LSTM(lstm_window, return_sequences=True)(c_x0)
     c_x0 = tfkl.TimeDistributed(tfkl.Dense(max_time))(c_x0)
-    c_x0 = tfkl.concatenate([combined_layer, c_x0])
     for i in range(layers):
         c_x0 = tfkl.Dense(max_time)(c_x0)
     c_x0 = concateDim(max_time, name = 'c0')(c_x0)
@@ -139,7 +138,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
 
 
 
-def get_counterfactuals(model, data, t = 0, draw = 30, type = "DSurv", test_data = None):
+def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data = None):
     if type == "DSurv":
 
         def get(data):
