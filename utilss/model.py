@@ -110,12 +110,14 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
         c_x0 = tfkl.Dense(max_time)(c_x0)
     c_x0 = concateDim(max_time, name = 'c0')(c_x0)
 
+
     combined = tf.stack([c_x1, c_x0, propensity_layer], axis=1)
     model = tf.keras.Model(inputs=[input_x_p, input_m_p, input_x, input_m, input_s,
                                    input_x0, input_x1, input_m0, input_m1], outputs=combined)
+    model.layers[38].trainable = False
+
     model.compile(loss=surv_likelihood_lrnn(max_time, alpha=alpha, beta=beta, gamma=gamma),
                   optimizer=tf.keras.optimizers.RMSprop(lr=0.001))
-
 
     checkpoint_path = os.path.join(os.getcwd(), 'saved_models', 'check_point')
 

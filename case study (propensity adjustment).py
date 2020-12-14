@@ -22,8 +22,8 @@ history_itvl = 14
 
 def ate_experiment(overlap):
     data, val_data, test_data, train_stat, val_stat, test_stat,surv_func_wrapper, train_full, val_full, test_full, raw= \
-    get_data(input_dim= 5 , sampleSize= 1500, max_time=max_time,prediction_itvl = 1, history_itvl=14, overlap=overlap,
-             seed= np.random.random_integers(1,1000), std = 1)
+    get_data(input_dim= 5 , sampleSize= 1200, max_time=max_time,prediction_itvl = 1, history_itvl=14, overlap=overlap,
+             seed= np.random.random_integers(1,1000), std = 0.5)
     print("simulation completed" )
 
 
@@ -161,8 +161,8 @@ def ate_experiment(overlap):
 
 ate_bias = []
 hr_bias = []
-for i in range(10):
-    ate_bias_one, hr_bias_one = ate_experiment(1)
+for i in range(35):
+    ate_bias_one, hr_bias_one = ate_experiment(0.85)
     ate_bias.append(ate_bias_one)
     hr_bias.append(hr_bias_one)
 
