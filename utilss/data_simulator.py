@@ -8,10 +8,19 @@ from utilss.data_handler import LDataSimu, build_data_surv_rnn
 
 ##########################################################
 # Data Simulation
-def get_data(input_dim=10, sampleSize=1000, max_time=30, prediction_itvl=1, history_itvl=14, overlap=1,  seed=1123, std = 1):
-    df, df_full, surv_func_wrapper = LDataSimu(sampleSize=sampleSize, max_time=max_time,
-                                               simu_dim=input_dim, scale= 2, overlap = overlap,
-                                               seed=np.random.seed(seed), plot=False, std = std)
+def get_data(input_dim=6, sampleSize=600, max_time=30, prediction_itvl=1, history_itvl=14, overlap=1, seed=123, std = 0.1, confound = 0.5, scale = 2):
+
+    df, df_full, surv_func_wrapper = LDataSimu(seed, sampleSize=sampleSize, max_time=max_time,
+                                               simu_dim=input_dim, scale= scale, overlap = overlap,
+                                               plot=False, std = std, confound=confound)
+    sum(df.Y)/max(df['0'])
+    #scale = 2  35%
+    #scale = 10  10%
+    #scale = 20  5%
+    #scale = 100  1%
+    #scale = 500  0.05%
+
+
     id_set = np.unique(df['0'])
     train_id, validate_id, test_id = np.split(id_set, [int(.7 * len(id_set)), int(.9 * len(id_set))])
     train_idx = df['0'].isin(train_id)

@@ -61,13 +61,13 @@ def make_surv_array(t, f, breaks):
                 y_train[i, n_intervals + np.where(t[i] < breaks[1:])[0][
                     0]] = 1  # mark failure at first bin where survival time < upper break-point
         else:  # if censored
-            y_train[i, 0:n_intervals] = 1.0 * (t[
-                                                   i] >= breaks_midpoint)  # if censored and lived more than half-way through interval, give credit for surviving the interval.
+            y_train[i, 0:n_intervals] = 1.0 * (t[i] >= breaks_midpoint)  # if censored and lived more than half-way through interval, give credit for surviving the interval.
     return y_train
 
 
-def LDataSimu(sampleSize=500, max_time=50, simu_dim=10, scale=1, seed=np.random.seed(141),overlap=1, plot=False, std = 1):
-    seed = seed
+def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,overlap=1, plot=False, std = 1, confound = 0.2):
+    np.random.seed(seed)
+
     scale = np.int(scale)
 
     # Define seed functions
@@ -79,12 +79,14 @@ def LDataSimu(sampleSize=500, max_time=50, simu_dim=10, scale=1, seed=np.random.
         # this_x = np.array(list(map(lambda x: (x - x.min()) / (x.max() - x.min()), this_x)))
         for i in range(first_cut+1, simu_dim):
             this_x[:, i] = np.random.choice(range(0, 2), size=sampleSize)
+
         return this_x
 
     def treatment_assignment(seed_x, overlap):
-        cut = np.int(seed_x.shape[1]/2)
-        A = ( np.sum(seed_x[:, 0:1], axis=1) > np.median(np.sum(seed_x[:, 0:1], axis=1)) * overlap ) * 1
-        #A =  np.random.choice([0,1], sampleSize)
+        P = np.sum(seed_x[:, 0:3], axis=1) >  (np.median(np.sum(seed_x[:, 0:3], axis=1)))
+        P = (1-overlap) * P + (overlap) * 0.5
+        A =  np.array([np.random.choice([0,1], 1, p = [1-p, p]) for p in P]).reshape(-1)
+
         return A
 
     def x_t(t, x_i):
@@ -97,14 +99,14 @@ def LDataSimu(sampleSize=500, max_time=50, simu_dim=10, scale=1, seed=np.random.
         x_t[0:cut] = x_t[0:cut] / t_effect
         return x_t
 
-    def surv_func_wrapper(train_x, A, sampleSize, t_start=0, max_time=max_time, plot=False):
+    def surv_func_wrapper(train_x, A, sampleSize, t_start=0, max_time=max_time, plot=False, confounding = confound):
         train_x = np.array(train_x)
         A = np.array(A)
 
         def hazard(t, x_i, a_i, lamda_t=max_time * scale):
             beta0 = 1.0
-            beta_e_1 = 0.2
-            beta_e_2 = 0.2
+            beta_e_1 = confounding
+            beta_e_2 = confounding
             firstcut = int(np.round(x_i.shape[0]) / 2)
             x = x_i  # x_t(t, x_i)
             if t == 0:
@@ -112,7 +114,6 @@ def LDataSimu(sampleSize=500, max_time=50, simu_dim=10, scale=1, seed=np.random.
             else:
                 baseline = np.log10(t)
             LMD = (beta0 * a_i +
-                   #beta0 * a_i * np.sum(x[0: 3]) +
                    beta_e_1 * np.sum(x[0: firstcut]) +
                    beta_e_2 * np.sum(x[firstcut + 1: simu_dim])) / lamda_t
             return LMD * baseline

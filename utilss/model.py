@@ -33,6 +33,27 @@ def custom_prior_fn(dtype, shape, name, trainable,
   return independent_lib.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
 
 
+def create_propensity(input_dim, max_time, history_itvl, data, val_data, batch_size = 256):
+    train_gen = DataGenerator_p(data, batch_size=int(batch_size / 2))
+    val_gen = DataGenerator_p(val_data, batch_size=int(batch_size / 2))
+
+    input_x = tfkl.Input(shape=(history_itvl, input_dim - 1))
+    input_m = tfkl.Input(shape=(history_itvl, input_dim - 1))
+
+    propensity_layer = ExternalMasking(mask_value=-1)([input_x, input_m])
+    propensity_layer = tfkl.LSTM(7, return_sequences=True)(propensity_layer)
+    propensity_layer = tfkl.TimeDistributed(tfkl.Dense(max_time))(propensity_layer)
+    for i in range(3):
+        propensity_layer = tfkl.Dense(max_time)(propensity_layer)
+        propensity_layer = tfkl.Dropout(0.1)(propensity_layer)
+    propensity_layer = concateDim(max_time, name='propensity_layer')(propensity_layer)
+    model_p = tf.keras.Model(inputs=[input_x, input_m], outputs=propensity_layer)
+    model_p.compile(loss=prop_likelihood_lrnn(window_size=max_time), optimizer=tf.keras.optimizers.RMSprop(lr=0.01))
+    early_stopping = EarlyStopping(monitor='loss', patience=2)
+    model_p.fit(train_gen, validation_data=val_gen, epochs=100, callbacks=[early_stopping], verbose=0)
+
+    return model_p
+
 
 def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window = 3, alpha=2, beta=2, gamma=1,
                  load = True, verbose = 0, model_name ='dSurv_history.pkl', batch_size = 256, layers = 10):
@@ -130,7 +151,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_weights_only=True, verbose=0)
         early_stopping = EarlyStopping(monitor='loss', patience=2)
         history = model.fit(train_gen,validation_data=val_gen,epochs=100,
-                            callbacks=[early_stopping,cp_callback, TqdmCallback(verbose=verbose)], verbose=0)
+                            callbacks=[early_stopping,cp_callback], verbose=0)
 
         history_dict = history.history
         with open(os.path.join(os.getcwd(), 'saved_models', model_name), 'wb') as file:
@@ -252,7 +273,7 @@ def benchmark_algorithms(input_dim, max_time, history_itvl, data, val_data, one_
         early_stopping = EarlyStopping(monitor='loss', patience=2)
         model.fit([rnn_x, rnn_m], rnn_y,
                   validation_data=([rnn_x_val, rnn_m_val], rnn_y_val),
-                  batch_size=batch_size, epochs=500, callbacks=[early_stopping], verbose=1, shuffle=True)
+                  batch_size=batch_size, epochs=500, callbacks=[early_stopping], verbose=0, shuffle=True)
 
 
 
@@ -272,7 +293,7 @@ def benchmark_algorithms(input_dim, max_time, history_itvl, data, val_data, one_
         early_stopping = EarlyStopping(monitor='loss', patience=2)
         model.fit([rnn_x, rnn_m], rnn_y[:,0:max_time],
                   validation_data=([rnn_x_val, rnn_m_val], rnn_y_val[:,0:max_time]),
-                  batch_size=batch_size, epochs=500, callbacks=[early_stopping], verbose=1, shuffle=True)
+                  batch_size=batch_size, epochs=500, callbacks=[early_stopping], verbose=0, shuffle=True)
 
     elif model == "KM":
         kmf0 = KaplanMeierFitter().fit(one_X[one_X[:, 3] == 0, 1], event_observed=one_X[one_X[:, 3] == 0, 2])

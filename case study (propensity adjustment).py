@@ -20,12 +20,11 @@ print("simulating..." )
 max_time = 30
 history_itvl = 14
 
-def ate_experiment(overlap):
+def ate_experiment(confound):
     data, val_data, test_data, train_stat, val_stat, test_stat,surv_func_wrapper, train_full, val_full, test_full, raw= \
-    get_data(input_dim= 5 , sampleSize= 1200, max_time=max_time,prediction_itvl = 1, history_itvl=14, overlap=overlap,
-             seed= np.random.random_integers(1,1000), std = 0.2)
+    get_data(input_dim= 6 , sampleSize= 1000, max_time=max_time,prediction_itvl = 1, history_itvl=14, overlap=1.0,
+             seed= np.random.random_integers(1,1000), std = 0.1, confound= confound)
     print("simulation completed" )
-
 
     trueSurv_wrapper = surv_func_wrapper(train_full, train_full.A, len(train_stat), t_start=0, max_time=max_time,
                                          plot=False)
@@ -43,7 +42,7 @@ def ate_experiment(overlap):
 
     # Model fitting lstm model with censor loss
     modelCDSM,model_p, history_dict = create_model(rnn_x.shape[2], max_time, history_itvl, data, val_data, lstm_window= 7,
-                                            alpha= 2, beta= 1, gamma=1.2, load=False, verbose=0, model_name='cox',
+                                            alpha= 2, beta= 1, gamma=1.5, load=False, verbose=0, model_name='cox',
                                             batch_size= 256, layers=3)
 
     modelCDSM = get_counterfactuals(modelCDSM, data, t=0, draw=10, test_data=test_data)
@@ -73,7 +72,7 @@ def ate_experiment(overlap):
     #IPW
     propensity_cdsm = np.array(model_p([rnn_x[:,:,1:], rnn_m[:,:,1:]])[:,0])
     weight1 = rnn_x[Time == 0,0,0] / np.clip(propensity_cdsm[Time == 0],a_min = 0.1, a_max=1) * sum(rnn_x[Time == 0,0,0])/len(y_pred_t)
-    weight0 = (1-rnn_x[Time == 0,0,0]) / np.clip(1-propensity_cdsm[Time == 0],a_min = 0.1, a_max=1) * (len(y_pred_t)-sum(rnn_x[Time == 0,0,0]))/len(y_pred_t)
+    weight0 = (1-rnn_x[Time == 0,0,0]) / np.clip(1-propensity_cdsm[Time == 0],a_min = 0.1,a_max=1) * (len(y_pred_t)-sum(rnn_x[Time == 0,0,0]))/len(y_pred_t)
 
     cf_durv_IPW = []
     hr_durv_IPW = []
@@ -135,21 +134,23 @@ def ate_experiment(overlap):
     cf_durv_tmle =  np.mean(np.cumprod(y_pred_t_tmle_1, 1)* weight1 - np.cumprod(y_pred_t_tmle_0, 1)* weight0 ,0)
 
     #############################################
+    #############################################
 
-    # sns.set(style="whitegrid", font_scale=1)
-    # fig, ax = plt.subplots(figsize=(7, 7))
-    # ax.plot(range(max_time), np.mean(cf_true[:, 0:max_time], 0), color="#8c8c8c", label="True")
-    # ax.plot(range(max_time), cf_durv_IPW, '--', color="#f0aeb4", label="IPW")
-    # ax.plot(range(max_time), cf_durv_tmle, '.', color="#f0aeb4", label="TMLE")
-    # ax.plot(range(max_time), np.mean(cf_durv, 0), color='#8DBFC5', alpha=0.9, label="CDSM")
-    # ax.plot(range(max_time), np.mean(cf_cdsm, 0), '+', color='#8DBFC5', alpha=1, label="CDSM (NC)")
-    # #ax.set_xticklabels(np.arange(-8, max_time * 3, 8))
-    # ax.set_xlabel("Time", fontsize=11, fontweight='bold')
-    # ax.set_ylabel("ATE (Difference in Survival Probability)", fontsize=11, fontweight='bold')
-    # plt.legend()
-    # plt.savefig("plots/ate_causal.png", bbox_inches='tight', pad_inches=0.5, dpi=500)
-    # plt.show()
+    sns.set(style="whitegrid", font_scale=1)
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.plot(range(max_time), np.mean(cf_true[:, 0:max_time], 0), color="#8c8c8c", label="True")
+    ax.plot(range(max_time), cf_durv_IPW, '--', color="#f0aeb4", label="IPW")
+    ax.plot(range(max_time), cf_durv_tmle, '.', color="#f0aeb4", label="TMLE")
+    ax.plot(range(max_time), np.mean(cf_durv, 0), color='#8DBFC5', alpha=0.9, label="CDSM")
+    ax.plot(range(max_time), np.mean(cf_cdsm, 0), '+', color='#8DBFC5', alpha=1, label="CDSM (NC)")
+    #ax.set_xticklabels(np.arange(-8, max_time * 3, 8))
+    ax.set_xlabel("Time", fontsize=11, fontweight='bold')
+    ax.set_ylabel("ATE (Difference in Survival Probability)", fontsize=11, fontweight='bold')
+    plt.legend()
+    plt.savefig("plots/ate_causal.png", bbox_inches='tight', pad_inches=0.5, dpi=500)
+    plt.show()
 
+    #############################################
     #############################################
 
     cv_df = raw.copy()
@@ -194,7 +195,7 @@ def ate_experiment(overlap):
 ate_bias = []
 hr_bias = []
 for i in range(10):
-    ate_bias_one, hr_bias_one = ate_experiment(1)
+    ate_bias_one, hr_bias_one = ate_experiment(2)
     ate_bias.append(ate_bias_one)
     hr_bias.append(hr_bias_one)
 
@@ -203,26 +204,6 @@ ate_bias_std = np.std(np.concatenate([ate_bias]),0)
 
 hr_bias_avg = np.mean(np.concatenate([hr_bias]),0)
 hr_bias_std = np.std(np.concatenate([hr_bias]),0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
