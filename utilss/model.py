@@ -163,7 +163,6 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
 
 def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data = None):
     if type == "DSurv":
-
         def get(data):
             rnn_x, rnn_m, rnn_s, rnn_y, time_pt = data
 
@@ -184,7 +183,7 @@ def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data
             y_pred = np.array(y_pred)
             y_pred_t = np.mean(y_pred,0)
             y_pred_std = np.std(y_pred,0)
-
+            cf_std_1 =  np.std(y_pred[:,:,0,:]-y_pred[:,:,1,:],0)*10
 
             y_pred1_t = y_pred_t[:,0,:].copy()
             y_pred1_std = y_pred_std[:,0,:].copy()
@@ -196,7 +195,6 @@ def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data
             y_pred_std = y_pred0_std.copy()
             y_pred_std[rnn_x[time_pt == t, 0, 0] == 1] = y_pred1_std[rnn_x[time_pt == t, 0, 0] == 1]
 
-            cf_std_1 =  y_pred1_std.copy()+ y_pred0_std.copy()
 
             return  y_pred_t, y_pred_std, y_pred1_t, y_pred0_t, cf_std_1, time_pt
 
