@@ -1,27 +1,22 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import seaborn as sns
-
-import statsmodels.formula.api as smf
-
-from utilss.model import create_model, get_counterfactuals
-from utilss.data_simulator import get_data
-
 # from lifelines import CoxTimeVaryingFitter
 # from lifelines.utils import add_covariate_to_timeline
 # from lifelines.utils import to_long_format
 from lifelines import KaplanMeierFitter
 
+from utilss.data_simulator import get_data
+from utilss.model import create_model, get_counterfactuals
 
-print("simulating..." )
+print("simulating...")
 
 max_time = 30
-data, pred_data,val_data, surv_func_wrapper, train_full, val_full, test_full, one_X = \
-    get_data(input_dim= 10, sampleSize= 1000, max_time=max_time, prediction_itvl=1, history_itvl=14,
-             overlap= 0.5, seed=1234, confound=0.5, scale= 5)
+data, pred_data, val_data, surv_func_wrapper, train_full, val_full, test_full, one_X = \
+    get_data(input_dim=10, sampleSize=1000, max_time=max_time, prediction_itvl=1, history_itvl=14,
+             overlap=1, seed=1234, confound=0.1, scale=5)
 
-print("simulation completed" )
+print("simulation completed")
 
 
 s_true = np.cumprod(surv_func_wrapper[0],1)
@@ -61,9 +56,9 @@ hr_durv = np.clip(y_pred1_t, 0.001, 1) / np.clip(y_pred0_t, 0.001, 1)
 #############################################
 sns.set(style="whitegrid", font_scale=1)
 fig, ax = plt.subplots(figsize=(7, 7))
-ax.plot(range(max_time), np.mean(s_true[:, 0:max_time], 0), color="#8c8c8c", label="True", alpha = 0.9)
-ax.plot(range(max_time), s_km,'--', color="#888888", label="KM")
-ax.plot(range(max_time), np.mean(s_durv, 0),  color='#8DBFC5', label="CDSM(unadjusted)")
+ax.plot(range(max_time), np.mean(s_true[:, 0:max_time], 0), color="#8c8c8c", label="True", alpha=0.9)
+ax.plot(range(max_time - 1), s_km, '--', color="#888888", label="KM")
+ax.plot(range(max_time), np.mean(s_durv, 0), color='#8DBFC5', label="CDSM(unadjusted)")
 ax.fill_between(range(max_time), np.quantile(s_durv,0.05,0), np.quantile(s_durv,0.95,0), color='#8DBFC5', alpha=0.2)
 ax.fill_between(range(max_time), np.quantile(s_true,0.05,0), np.quantile(s_true,0.95,0), color='#8c8c8c', alpha=0.2)
 #ax.set_xticklabels(np.arange(-8, max_time * 3, 8))
