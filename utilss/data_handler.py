@@ -67,153 +67,90 @@ def make_surv_array(t, f, breaks):
 
 def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,overlap=1, plot=False, std = 1, confound = 0.2):
     np.random.seed(seed)
-
     scale = np.int(scale)
 
-    # Define seed functions
     def x_seed(simu_dim, sampleSize):
-        first_cut = int(np.round(simu_dim / 2))
         this_x = np.zeros((sampleSize, simu_dim), dtype=np.float32)
-        for i in range(0, first_cut):
+        for i in range(0, simu_dim):
             this_x[:, i] = abs(np.random.normal(0, std, size=sampleSize))
-        # this_x = np.array(list(map(lambda x: (x - x.min()) / (x.max() - x.min()), this_x)))
-        for i in range(first_cut+1, simu_dim):
-            this_x[:, i] = np.random.choice(range(0, 2), size=sampleSize)
-
         return this_x
 
-    def treatment_assignment(seed_x, overlap):
-        P = np.sum(seed_x[:, 0:3], axis=1) >  (np.median(np.sum(seed_x[:, 0:3], axis=1)))
-        P = (1-overlap) * P + (overlap) * 0.5
-        A =  np.array([np.random.choice([0,1], 1, p = [1-p, p]) for p in P]).reshape(-1)
+    def x_t(t, this_x):
+        cut = int(this_x.shape[1] / 2)
+        if t == 0:
+            t_effect = 0
+            this_x = this_x * t_effect
+        else:
+            t_effect = t*(1/2)
+            this_x[:, 0:cut] = this_x[:, 0:cut] * t_effect
+        return this_x
 
+    def treatment_assignment(x_series,t, overlap= 0, direction = None):
+        P = np.sum(x_series[:,t, 0:3], axis=1) > (np.median(np.sum(x_series[:,t, 0:3], axis=1)))
+        P = overlap * P + (1-overlap) * 0.5
+        A = np.array([np.random.choice([1,0], 1, p = [1-p, p]) for p in P]).reshape(-1)
         return A
 
-    def x_t(t, x_i):
-        cut = int(np.round(len(x_i) / 2))
-        if t == 0:
-            t_effect = 1
-        else:
-            t_effect = np.exp(-(t ** 0.5) * np.log10(t) + t ** 0.5 + 0.013 * t ** 1.5)
-        x_t = x_i.copy()
-        x_t[0:cut] = x_t[0:cut] / t_effect
-        return x_t
+    this_x = x_seed(simu_dim, sampleSize)
+    x_series = [x_t(t, this_x.copy()).reshape(sampleSize,1,simu_dim).copy() for t in range(0,max_time)]
+    x_series = np.concatenate(x_series,1)
+    A_series = [treatment_assignment(x_series, t, overlap).reshape(sampleSize,1) for t in  range(0,max_time)]
+    A_series = np.concatenate(A_series,1)
+    A_series = A_series.reshape(sampleSize, max_time, 1)
+    A_series = np.repeat(A_series[:,1,:],max_time,1)
+    A_series = A_series.reshape(sampleSize, max_time, 1)
 
-    def surv_func_wrapper(train_x, A, sampleSize, t_start=0, max_time=max_time, plot=False, confounding = confound):
-        train_x = np.array(train_x)
-        A = np.array(A)
+    train_x = np.append(A_series, x_series,2)
+    # plt.plot(np.mean(x_series,2).T, alpha=0.01, color='blue')
+    # plt.show()
 
-        def hazard(t, x_i, a_i, lamda_t=max_time * scale):
-            beta0 = 1.0
-            beta_e_1 = confounding
-            beta_e_2 = confounding
-            firstcut = int(np.round(x_i.shape[0]) / 2)
-            x = x_i  # x_t(t, x_i)
-            if t == 0:
-                baseline = 0.1
-            else:
-                baseline = np.log10(t)
-            LMD = (beta0 * a_i +
-                   beta_e_1 * np.sum(x[0: firstcut]) +
-                   beta_e_2 * np.sum(x[firstcut + 1: simu_dim])) / lamda_t
-            return LMD * baseline
+    def surv_func_wrapper(x_series):
+        A_series_1 = [treatment_assignment(x_series, t, overlap).reshape(sampleSize, 1) for t in range(0, max_time)]
+        A_series_1 = np.concatenate(A_series_1, 1)
+        A_series_1 = A_series_1.reshape(sampleSize, max_time, 1)
+        train_x_1 = np.append(A_series_1, x_series,2)
 
-        def surv_func(t, x_i=None, a_i=None):
-            x_i = np.array(x_i).reshape(-1)
-            lmd = hazard(t, x_i, a_i)
-            return np.exp(- lmd)
+        #plt.plot(A_series_1[:,:,0].T, alpha = 0.01, color = 'blue')
+        #plt.show()
+        #hazard
+        beta = confound # confound = 0.1; max_time = 30
+        hazard = (beta * train_x[:,:,0] + np.mean(train_x[:,:,1:], 2) ) / (scale*5)
+        hazard0 = (np.mean(train_x[:,:,1:], 2)) / (scale)
+        hazard1 = (beta * train_x_1[:,:,0] + np.mean(train_x_1[:,:,1:], 2)) / (scale*5)
 
-        def get_truesurv(t):
-        #for t in tqdm(range(max(0, t_start - 1), max_time+3)):
-            if t == t_start:
-                list = Parallel(n_jobs=1)(delayed(surv_func)(1, train_x[(train_x[:,0] == i) & (train_x[:,1] == t), 3:], A[(train_x[:,0] == i)& (train_x[:,1] == t) ]) for i in np.unique(train_x[:,0])  )  # 273
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            else:
-                list = Parallel(n_jobs=1)(delayed(surv_func)(t, train_x[(train_x[:,0] == i) & (train_x[:,1] == t), 3:], A[(train_x[:,0] == i)& (train_x[:,1] == t) ]) for i in np.unique(train_x[:,0])  )  # 273
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            #trueSurv = np.append(trueSurv, cSurv, axis=0)
-            return cSurv
 
-        trueSurv = Parallel(n_jobs=-1)(delayed(get_truesurv)(t) for t in (range(max(0, t_start - 1), max_time+3)))
-        trueSurv = np.concatenate(trueSurv)
-        trueSurv = trueSurv.T[:, 1:]
+        #plt.plot(np.mean(hazard,0), color = 'blue')
+        #plt.show()
 
-        if plot:
-            plt.plot(trueSurv.T, alpha = 0.1, color = "#8DBFC5")
-            plt.show()
+        trueSurv = np.exp(- hazard)
+        trueSurv_1 = np.exp(- hazard1)
+        trueSurv_0 = np.exp(- hazard0)
 
-        def get_truesurv_1(t, arm=1):
-            if t == t_start:
-                list = Parallel(n_jobs=1)(delayed(surv_func)(1, train_x[(train_x[:,0] == i) & (train_x[:,1] == t), 3:], arm ) for i in np.unique(train_x[:,0])  )
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            else:
-                list = Parallel(n_jobs=1)(delayed(surv_func)(t, train_x[(train_x[:,0] == i) & (train_x[:,1] == t), 3:], arm ) for i in np.unique(train_x[:,0])  )
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            return cSurv
-        trueSurv_1 = Parallel(n_jobs=-1)(delayed(get_truesurv_1)(t,1) for t in (range(max(0, t_start - 1), max_time + 3)))
-        trueSurv_1 = np.concatenate(trueSurv_1)
-        trueSurv_1 = trueSurv_1.T[:, 1:]
-
-        trueSurv_0 = Parallel(n_jobs=-1)(delayed(get_truesurv_1)(t, 0) for t in (range(max(0, t_start - 1), max_time + 3)))
-        trueSurv_0 = np.concatenate(trueSurv_0)
-        trueSurv_0 = trueSurv_0.T[:, 1:]
+        # plt.plot(trueSurv.T, color='green', alpha = 0.1)
+        # plt.show()
+        # plt.plot(np.mean(trueSurv, 0), color='green')
+        # plt.plot(np.mean(trueSurv_0, 0), color='red')
+        # plt.plot(np.mean(trueSurv_1, 0) - np.mean(trueSurv_0, 0), color='red')
+        # plt.show()
 
         return trueSurv, trueSurv_1, trueSurv_0
 
-    def cens_func_wrapper(train_x, A, sampleSize,t_start=0, max_time=max_time, scale=20):
-        train_x = np.array(train_x)
-        A = np.array(A)
-        def censor_hazard(t, x_i):
-            beta_e_1 = 0.1
-            x = x_i  # x_t(t, x_i)
-            if t == 0:
-                baseline = 0.1
-            else:
-                baseline = np.log10(t)
-            LMD = beta_e_1 * np.sum(x[0: 2])
-            return LMD * baseline / scale
+    def cens_func_wrapper(train_x):
 
-        def censor_func(t, x_i, a_i):
-            x_i = np.array(x_i).reshape(-1)
-            lmd = censor_hazard(t, x_i)
-            return np.exp(- lmd)
+        hazard = (np.mean(train_x[:, :, 1:], 2)) / (max_time * scale /2)
+        trueCens = np.exp(- hazard)
 
-        def get_truesurv(t):
-            # for t in tqdm(range(max(0, t_start - 1), max_time+3)):
-            if t == t_start:
-                list = Parallel(n_jobs=1)(
-                    delayed(censor_func)(1, train_x[(train_x[:, 0] == i) & (train_x[:, 1] == t), 3:],
-                                       A[(train_x[:, 0] == i) & (train_x[:, 1] == t)]) for i in
-                    np.unique(train_x[:, 0]))  # 273
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            else:
-                list = Parallel(n_jobs=1)(
-                    delayed(censor_func)(t, train_x[(train_x[:, 0] == i) & (train_x[:, 1] == t), 3:],
-                                       A[(train_x[:, 0] == i) & (train_x[:, 1] == t)]) for i in
-                    np.unique(train_x[:, 0]))  # 273
-                cSurv = np.array(list).reshape((1, sampleSize))  # 1-CDF
-            # trueSurv = np.append(trueSurv, cSurv, axis=0)
-            return cSurv
-
-        trueCens = Parallel(n_jobs=-1)(delayed(get_truesurv)(t) for t in (range(max(0, t_start - 1), max_time + 3)))
-        trueCens = np.concatenate(trueCens)
-        trueCens = trueCens.T[:, 1:]
         return trueCens
 
+    #plt.plot(trueSurv.T, alpha = 0.005, color = 'blue')
+    #plt.plot(trueSurv_1.T, alpha = 0.005, color = 'green')
+    #plt.plot(trueSurv_0.T, alpha = 0.005, color = 'red')
+    #plt.show()
 
-    #print('Generate seed data at time 0')
-    seed_x = x_seed(simu_dim, sampleSize)
-    A = treatment_assignment(seed_x, overlap)
-    train_x = [np.array([np.append([i, t, A[i]], x_t(t, seed_x[i])) for t in range(0, max_time+7)]) for i in
-               range(0, sampleSize) ]
-    train_x = np.concatenate(train_x)
+    trueSurv, trueSurv_1, trueSurv_0 = surv_func_wrapper(x_series)
+    trueCens = cens_func_wrapper(x_series)
 
-    train_x = pd.DataFrame(train_x)
-    train_x.columns = np.arange(0,len( train_x.columns )).astype(str)
-    train_x = train_x.rename(columns={"1": "T", "2": "A"})
 
-    trueSurv, trueSurv_1, trueSurv_0 = surv_func_wrapper(train_x, train_x.A, sampleSize, plot=False)
-    trueCens = cens_func_wrapper(train_x,train_x.A, sampleSize, max_time=max_time+3, scale = 30)
 
     #print('Simulate failure time')
     trueT = np.ones((sampleSize)) * max_time
@@ -221,7 +158,7 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
     event = np.zeros((sampleSize))
     censor = np.zeros((sampleSize))
 
-    for t in range(0, max_time+1):
+    for t in range(0, max_time):
         # T = np.array([integrate.quad(surv_func_t, t-1, t, args=(x_i, a_i))[0] for x_i, a_i in zip(seed_x, A)])
         T = trueSurv[:, t] < np.random.uniform(0, 1, sampleSize)
         trueT[(T == True) & (event == 0)] = t
@@ -234,36 +171,47 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
     event = (time == trueT) & (event == 1)
     time = np.round(time, 0)
 
-    X = train_x.reset_index(drop = True)
+    # Want DF?
+
+
+    train_df = pd.DataFrame(np.concatenate(train_x,0))
+    train_df.columns = np.arange(0,len( train_df.columns )).astype(str)
+    train_df = train_df.rename(columns={"0": "A"})
+    train_df['T'] = np.repeat(np.arange(0,30,1).reshape(-1,1), sampleSize, 1).T.reshape(-1)
+    train_df['ID'] = np.repeat(np.arange(0,sampleSize,1), max_time)
+    #train_df['Delta'] = event * 1.0
+    full_df = train_df.copy()
+
+
+    X = train_df.reset_index(drop = True)
     idx_censor = []
-    for id in np.unique(X['0']):
-        temp =  X.loc[X['0'] == id]['T']
+    for id in tqdm(np.unique(X['ID'])):
+        temp =  X.loc[X['ID'] == id]['T']
         temp_idx = temp.index <= temp[temp <= time[int(id)]].index[-1]
         temp_idx = temp.index[temp_idx]
         temp_idx = np.array(temp_idx)
         idx_censor.append(temp_idx)
     idx_censor = np.concatenate(idx_censor)
     X = X.iloc[idx_censor].reset_index(drop = True)
-    A = pd.DataFrame(np.array(X['A']), columns = ['A']).reset_index(drop = True)
     T = pd.DataFrame(np.array(X['T']), columns = ['T']).reset_index(drop = True)
     df = X.copy()
     df['Y'] = 0
-    for i in np.unique(df['0']):
-        temp = np.zeros(len( df.loc[df['0'] == i,'Y']))
+    for i in tqdm(np.unique(df['ID'])):
+        temp = np.zeros(len( df.loc[df['ID'] == i,'Y']))
         temp[-1] =  event[int(i)] * 1
-        df.loc[df['0'] == i,'Y'] = temp
+        df.loc[df['ID'] == i,'Y'] = temp
 
 
     if plot:
-        plt.plot(range(trueSurv[A == 1].shape[1]), np.mean(np.cumprod(trueSurv[A == 1], 1), 0), '--', color="#448396",
-                 label="ATT")
-        plt.plot(range(trueSurv[A == 0].shape[1]), np.mean(np.cumprod(trueSurv[A == 0], 1), 0), '--', color="#448396",
-                 label="ATC")
-        plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv, 1), 0), '-', color="#666396", label='average')
-        plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv_1, 1), 0), '-', color="#448396",
-                 label='True treated')
-        plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv_0, 1), 0), '-', color="#448396",
-                 label='True control')
+        # plt.plot(range(trueSurv[A == 1].shape[1]), np.mean(np.cumprod(trueSurv[A == 1], 1), 0), '--', color="#448396",
+        #          label="ATT")
+        # plt.plot(range(trueSurv[A == 0].shape[1]), np.mean(np.cumprod(trueSurv[A == 0], 1), 0), '--', color="#448396",
+        #          label="ATC")
+        # plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv, 1), 0), '-', color="#666396", label='average')
+        # plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv_1, 1), 0), '-', color="#448396",
+        #          label='True treated')
+        # plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv_0, 1), 0), '-', color="#448396",
+        #          label='True control')
 
         kmf = KaplanMeierFitter()
         kmf.fit(time, event_observed=event * 1.)
@@ -276,18 +224,14 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
         plt.hist(time)
         plt.show()
 
-
-    #print('step 1 done!')
-
-
-    return df, train_x, surv_func_wrapper
+    return df, full_df, [trueSurv, trueSurv_1, trueSurv_0]
 
 
 def build_data_surv_rnn(train, score = None, history_itvl=14, prediction_itvl=7, max_time=30):
-    observation = train['0']
-    one_X = train.groupby(train['0'])['T'].max()
-    event = train.groupby(train['0'])['Y'].max()
-    train.drop(['T', 'Y', '0'], axis=1, inplace=True)
+    observation = train['ID']
+    one_X = train.groupby(train['ID'])['T'].max()
+    event = train.groupby(train['ID'])['Y'].max()
+    train.drop(['T', 'Y', 'ID'], axis=1, inplace=True)
     train_x = np.array(train.reset_index(drop=True))
     x_dim = train_x.shape[1]
 
@@ -421,7 +365,7 @@ def dataset_normalize(_dataset, all_x_add):
 class DataGenerator(tf.keras.utils.Sequence):
         def __init__(self, data, batch_size=32, shuffle=True):
             'Initialization'
-            self.rnn_x, self.rnn_m, self.rnn_s, self.rnn_y, _= data
+            self.rnn_x, self.rnn_m, self.rnn_s, self.rnn_y,_  = data
             self.batch_size = batch_size
             self.shuffle = shuffle
 
