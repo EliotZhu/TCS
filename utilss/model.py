@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from tqdm import tqdm
 
 tfd = tfp.distributions
 tfpl = tfp.layers
@@ -189,7 +190,7 @@ def get_counterfactuals(model, data, t=0, draw=10, type="CDSM", test_data=None):
             y_pred = [model.predict([rnn_x[time_pt == t, :, 1:], rnn_m[time_pt == t, :, 1:],
                                      rnn_x[time_pt == t], rnn_m[time_pt == t], rnn_s[time_pt == t],
                                      rnn_x0[time_pt == t], rnn_x1[time_pt == t], rnn_m0[time_pt == t],
-                                     rnn_m1[time_pt == t]], verbose=0) for _ in range(draw)]
+                                     rnn_m1[time_pt == t]], verbose=0) for _ in tqdm(range(draw))]
 
             y_pred = np.array(y_pred)
             y_pred_t = np.mean(y_pred,0)

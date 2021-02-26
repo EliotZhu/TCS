@@ -377,61 +377,59 @@ class DataGenerator(tf.keras.utils.Sequence):
         self.rnn_x1 = self.rnn_x.copy()
         self.rnn_x1[:, :, 0] = 1
 
-            self.rnn_m0 = self.rnn_m.copy()
-            self.rnn_m1 = self.rnn_m.copy()
-            self.rnn_m0[self.rnn_x[:, :, 0]==0] = -1
+        self.rnn_m0 = self.rnn_m.copy()
+        self.rnn_m1 = self.rnn_m.copy()
+        self.rnn_m0[self.rnn_x[:, :, 0] == 0] = -1
         self.rnn_m1[self.rnn_x[:, :, 0] == 1] = -1
         self.window = window
 
-            self.on_epoch_end()
+        self.on_epoch_end()
 
-        def __len__(self):
-            'Denotes the number of batches per epoch'
-            return int(np.floor(len(self.rnn_y) / self.batch_size))
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.rnn_y) / self.batch_size))
 
-        def __getitem__(self, index):
-            'Generate one batch of data'
-            # Generate indexes of the batch
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
 
-            indexes1 = self.indexes1[index * self.batch_size1:(index + 1) * self.batch_size1]
-            indexes0 = self.indexes0[index * self.batch_size0:(index + 1) * self.batch_size0]
+        indexes1 = self.indexes1[index * self.batch_size1:(index + 1) * self.batch_size1]
+        indexes0 = self.indexes0[index * self.batch_size0:(index + 1) * self.batch_size0]
 
-            # Generate data
-            X, y = self.__data_generation(indexes1, indexes0)
+        # Generate data
+        X, y = self.__data_generation(indexes1, indexes0)
 
-            return X, y
+        return X, y
 
-        def on_epoch_end(self):
-            'Updates indexes after each epoch'
-            self.indexes = np.arange(len(self.rnn_x))
-            self.indexes0 = self.indexes[(self.rnn_x[:, 0:1, 0] == 0).reshape(-1)]
-            self.indexes1 = self.indexes[(self.rnn_x[:, 0:1, 0] == 1).reshape(-1)]
-            self.indexes0_len = len(self.indexes0 )
-            self.indexes1_len = len(self.indexes1 )
-            self.batch_size1 = int(self.batch_size * (self.indexes1_len / (self.indexes0_len + self.indexes1_len)))
-            self.batch_size0 = int(self.batch_size * (self.indexes0_len / (self.indexes0_len + self.indexes1_len)))
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.rnn_x))
+        self.indexes0 = self.indexes[(self.rnn_x[:, 0:1, 0] == 0).reshape(-1)]
+        self.indexes1 = self.indexes[(self.rnn_x[:, 0:1, 0] == 1).reshape(-1)]
+        self.indexes0_len = len(self.indexes0)
+        self.indexes1_len = len(self.indexes1)
+        self.batch_size1 = int(self.batch_size * (self.indexes1_len / (self.indexes0_len + self.indexes1_len)))
+        self.batch_size0 = int(self.batch_size * (self.indexes0_len / (self.indexes0_len + self.indexes1_len)))
 
-            if self.shuffle == True:
-                np.random.shuffle(self.indexes0)
-                np.random.shuffle(self.indexes1)
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes0)
+            np.random.shuffle(self.indexes1)
 
+    def __data_generation(self, indexes1, indexes0):
+        'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
+        # Initialization
+        index = np.concatenate([indexes1, indexes0])
 
-        def __data_generation(self, indexes1, indexes0):
-            'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
-            # Initialization
-            index = np.concatenate([indexes1, indexes0])
+        X = [self.rnn_x[index, :, 1:], self.rnn_m[index, :, 1:],
+             self.rnn_x[index], self.rnn_m[index], self.rnn_s[index],
+             self.rnn_x0[index], self.rnn_x1[index],
+             self.rnn_m0[index], self.rnn_m1[index]]
 
-            X = [self.rnn_x[index, :, 1:], self.rnn_m[index, :, 1:],
-                 self.rnn_x[index], self.rnn_m[index], self.rnn_s[index],
-                 self.rnn_x0[index], self.rnn_x1[index],
-                 self.rnn_m0[index], self.rnn_m1[index]]
+        y = np.concatenate([self.rnn_y[index], self.rnn_y[index]], axis=1)
+        y[self.rnn_x[index, 0:1, 0].reshape(-1) == 0, self.window * 2:] = -10
+        y[self.rnn_x[index, 0:1, 0].reshape(-1) == 1, 0:self.window * 2] = -10
 
-            # y_temp = np.concatenate([self.rnn_y[index], self.rnn_x[index, 0:1, 0]], axis=1)
-            y = np.concatenate([self.rnn_y[index], self.rnn_y[index]], axis=1)
-            y[self.rnn_x[index, 0:1, 0].reshape(-1) == 0, self.window * 2:] = -10
-            y[self.rnn_x[index, 0:1, 0].reshape(-1) == 1, 0:self.window * 2] = -10
-
-            return X, y
+        return X, y
 
 
 class DataGenerator_p(tf.keras.utils.Sequence):

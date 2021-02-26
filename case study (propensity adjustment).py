@@ -11,7 +11,7 @@ from utilss.model import create_model, get_counterfactuals
 
 print("simulating...")
 
-max_time = 48
+max_time = 30
 data, pred_data, val_data, surv_func_wrapper, train_full, val_full, test_full, one_X = \
     get_data(input_dim=10, sampleSize=2000, max_time=max_time, prediction_itvl=1, history_itvl=14,
              overlap=0.5, seed=1234, confound=0, scale=5)
@@ -35,20 +35,22 @@ kmf = KaplanMeierFitter().fit(one_X['T'], event_observed=one_X['Y'])
 s_km = np.array(kmf.survival_function_.KM_estimate)
 cf_km = np.array(kmf1.survival_function_.KM_estimate - kmf0.survival_function_.KM_estimate)
 
+# Here we fit the model and draw the posterior estimations
 modelCDSM, model_p, history_dict = create_model(rnn_x.shape[2], max_time=max_time, history_itvl=14,
-                                                data=data, val_data=val_data, lstm_window=14,
-                                                alpha=1, beta=1, gamma=0, load=False, verbose=0,
+                                                data=data, val_data=val_data, lstm_window=int(max_time / 4),
+                                                alpha=1, beta=1, gamma=1, load=False, verbose=0,
                                                 model_name='CDSM(unadjusted)',
-                                                batch_size=int(rnn_x.shape[0] / 2), layers=10)
+                                                batch_size=int(rnn_x.shape[0] / 2), layers=int(rnn_x.shape[2] / 2))
+print("model fitted")
+print("getting potential outcomes...")
+modelCDSM_posterior = get_counterfactuals(modelCDSM, pred_data, t=0, draw=50)
+print("posterior sampling done!")
 
-modelCDSM = get_counterfactuals(modelCDSM, data, t=0, draw=1, test_data=pred_data)
-
-y_pred_t, y_pred_std, y_pred1_t, y_pred0_t, cf_std_1, _, \
-y_pred_t_test, y_pred_std_test, y_pred1_t_test, y_pred0_t_test, cf_std_1_test, _ = modelCDSM
+# Compose the results
+y_pred_t, y_pred_std, y_pred1_t, y_pred0_t, cf_std_1, _, _, _, _, _, _, _ = modelCDSM_posterior
 s_durv = np.cumprod(y_pred_t, 1)
 cf_durv = np.cumprod(y_pred0_t, 1) - np.cumprod(y_pred1_t, 1)
 hr_durv = np.clip(y_pred1_t, 0.001, 1) / np.clip(y_pred0_t, 0.001, 1)
-
 
 #############################################
 #############################################
