@@ -2,9 +2,9 @@ import os
 import pickle
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 import tensorflow_probability as tfp
+
 tfd = tfp.distributions
 tfpl = tfp.layers
 tfkl = tf.keras.layers
@@ -15,25 +15,28 @@ from tensorflow_probability.python.distributions import normal as normal_lib
 
 from keras.callbacks import EarlyStopping
 from lifelines import KaplanMeierFitter
-from utilss.layers import ExternalMasking, concateDim, reducedim
+from utilss.layers import ExternalMasking, concateDim
 from utilss.loss_function import surv_likelihood_lrnn, prop_likelihood_lrnn, surv_likelihood_lrnn_2
 from utilss.data_handler import DataGenerator, DataGenerator_p
 
-from tqdm.keras import TqdmCallback
 tf.keras.backend.set_floatx('float32')
 
 
 def custom_prior_fn(dtype, shape, name, trainable,
-                                   add_variable_fn):
-  """Creates multivariate standard `Normal` distribution.
-  """
-  del name, trainable, add_variable_fn   # unused
-  dist = normal_lib.Normal(loc=tf.ones(shape, dtype)*0.01, scale=dtype.as_numpy_dtype(0.1))
-  batch_ndims = tf.size(dist.batch_shape_tensor())
-  return independent_lib.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
+                    add_variable_fn):
+    """
+    Creates multivariate standard `Normal` distribution.
+    """
+    del name, trainable, add_variable_fn  # unused
+    dist = normal_lib.Normal(loc=tf.ones(shape, dtype) * 0.01, scale=dtype.as_numpy_dtype(0.1))
+    batch_ndims = tf.size(dist.batch_shape_tensor())
+    return independent_lib.Independent(dist, reinterpreted_batch_ndims=batch_ndims)
 
 
-def create_propensity(input_dim, max_time, history_itvl, data, val_data, batch_size = 256):
+def create_propensity(input_dim, max_time, history_itvl, data, val_data, batch_size=256):
+    '''
+    Optional function for propensity score model
+    '''
     train_gen = DataGenerator_p(data, batch_size=int(batch_size / 2))
     val_gen = DataGenerator_p(val_data, batch_size=int(batch_size / 2))
 
@@ -55,15 +58,14 @@ def create_propensity(input_dim, max_time, history_itvl, data, val_data, batch_s
     return model_p
 
 
-def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window = 3, alpha=2, beta=2, gamma=1,
-                 load = True, verbose = 0, model_name ='dSurv_history.pkl', batch_size = 256, layers = 10):
-
+def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window=3, alpha=2, beta=2, gamma=1,
+                 load=False, verbose=0, model_name='CDSM_history.pkl', batch_size=256, layers=10):
     print('fit propensity')
-    train_gen = DataGenerator_p(data, batch_size= int(batch_size/2))
-    val_gen = DataGenerator_p(val_data, batch_size= int(batch_size/2))
+    train_gen = DataGenerator_p(data, batch_size=int(batch_size / 2))
+    val_gen = DataGenerator_p(val_data, batch_size=int(batch_size / 2))
 
-    input_x = tfkl.Input(shape=(history_itvl, input_dim-1))
-    input_m = tfkl.Input(shape=(history_itvl, input_dim-1))
+    input_x = tfkl.Input(shape=(history_itvl, input_dim - 1))
+    input_m = tfkl.Input(shape=(history_itvl, input_dim - 1))
 
     propensity_layer = ExternalMasking(mask_value=-1)([input_x, input_m])
     propensity_layer = tfkl.LSTM(7, return_sequences=True)(propensity_layer)
@@ -71,19 +73,19 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     for i in range(3):
         propensity_layer = tfkl.Dense(max_time)(propensity_layer)
         propensity_layer = tfkl.Dropout(0.1)(propensity_layer)
-    propensity_layer = concateDim(max_time, name = 'propensity_layer')(propensity_layer)
+    propensity_layer = concateDim(max_time, name='propensity_layer')(propensity_layer)
     model_p = tf.keras.Model(inputs=[input_x, input_m], outputs=propensity_layer)
-    model_p.compile(loss= prop_likelihood_lrnn(window_size = max_time), optimizer=tf.keras.optimizers.RMSprop(lr=0.01))
+    model_p.compile(loss=prop_likelihood_lrnn(window_size=max_time), optimizer=tf.keras.optimizers.RMSprop(lr=0.01))
     early_stopping = EarlyStopping(monitor='loss', patience=2)
     model_p.fit(train_gen, validation_data=val_gen, epochs=100, callbacks=[early_stopping], verbose=0)
 
     print('fit main model')
 
-    train_gen = DataGenerator(data, batch_size=batch_size)
-    val_gen = DataGenerator(val_data, batch_size=batch_size)
+    train_gen = DataGenerator(data, window=max_time, batch_size=batch_size)
+    val_gen = DataGenerator(val_data, window=max_time, batch_size=batch_size)
 
-    input_x_p = tfkl.Input(shape=(history_itvl, input_dim-1))
-    input_m_p = tfkl.Input(shape=(history_itvl, input_dim-1))
+    input_x_p = tfkl.Input(shape=(history_itvl, input_dim - 1))
+    input_m_p = tfkl.Input(shape=(history_itvl, input_dim - 1))
 
     input_x = tfkl.Input(shape=(history_itvl, input_dim))
     input_m = tfkl.Input(shape=(history_itvl, input_dim))
@@ -133,6 +135,7 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
 
 
     combined = tf.stack([c_x1, c_x0, propensity_layer], axis=1)
+
     model = tf.keras.Model(inputs=[input_x_p, input_m_p, input_x, input_m, input_s,
                                    input_x0, input_x1, input_m0, input_m1], outputs=combined)
     model.layers[38].trainable = False
@@ -150,8 +153,8 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     else:
         cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath = checkpoint_path, save_weights_only=True, verbose=0)
         early_stopping = EarlyStopping(monitor='loss', patience=2)
-        history = model.fit(train_gen,validation_data=val_gen,epochs=100,
-                            callbacks=[early_stopping,cp_callback], verbose=0)
+        history = model.fit(train_gen, validation_data=val_gen, epochs=100,
+                            callbacks=[early_stopping, cp_callback], verbose=verbose)
 
         history_dict = history.history
         with open(os.path.join(os.getcwd(), 'saved_models', model_name), 'wb') as file:
@@ -160,9 +163,16 @@ def create_model(input_dim, max_time, history_itvl, data, val_data, lstm_window 
     return model,model_p,history_dict
 
 
-
-def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data = None):
-    if type == "DSurv":
+def get_counterfactuals(model, data, t=0, draw=10, type="CDSM", test_data=None):
+    '''
+    Predict the potential outcomes given treatment conditions;
+    data: prediction data set;
+    Draw: number of Bayesian samples ;
+    t: prediction time/ 0 for next step;
+    type: model type
+    test_data: specify any test data.
+    '''
+    if type == "CDSM":
         def get(data):
             rnn_x, rnn_m, rnn_s, rnn_y, time_pt = data
 
@@ -176,14 +186,15 @@ def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data
             rnn_m0[rnn_x[:, :, 0] == 0] = -1
             rnn_m1[rnn_x[:, :, 0] == 1] = -1
 
-            y_pred =  [model.predict([rnn_x[time_pt == t,:,1:], rnn_m[time_pt == t,:,1:],
-                                      rnn_x[time_pt == t], rnn_m[time_pt == t], rnn_s[time_pt == t],
-                                      rnn_x0[time_pt == t], rnn_x1[time_pt == t], rnn_m0[time_pt == t],rnn_m1[time_pt == t] ], verbose=0) for _ in range(draw)]
+            y_pred = [model.predict([rnn_x[time_pt == t, :, 1:], rnn_m[time_pt == t, :, 1:],
+                                     rnn_x[time_pt == t], rnn_m[time_pt == t], rnn_s[time_pt == t],
+                                     rnn_x0[time_pt == t], rnn_x1[time_pt == t], rnn_m0[time_pt == t],
+                                     rnn_m1[time_pt == t]], verbose=0) for _ in range(draw)]
 
             y_pred = np.array(y_pred)
             y_pred_t = np.mean(y_pred,0)
-            y_pred_std = np.std(y_pred,0)
-            cf_std_1 =  np.std(y_pred[:,:,0,:]-y_pred[:,:,1,:],0)*10
+            y_pred_std = np.std(y_pred, 0)
+            cf_std_1 = np.std(y_pred[:, :, 0, :] - y_pred[:, :, 1, :], 0)
 
             y_pred1_t = y_pred_t[:,0,:].copy()
             y_pred1_std = y_pred_std[:,0,:].copy()
@@ -207,7 +218,6 @@ def get_counterfactuals(model, data, t = 0, draw = 10, type = "DSurv", test_data
             y_pred_t_test, y_pred_std_test, y_pred1_t_test, y_pred0_t_test, cf_std_1_test, time_pt_test = [None,None,None,None,None,None]
 
     elif  type == "StandardRNN":
-
         def get(data):
             rnn_x, rnn_m, rnn_s, rnn_y, time_pt = data
             rnn_x0 = rnn_x.copy()

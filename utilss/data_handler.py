@@ -6,10 +6,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from joblib import Parallel, delayed
 from lifelines import KaplanMeierFitter
 from tqdm import tqdm
-import tensorflow as tf
 
 
 def arr_to_xmd(arr, fill = False):
@@ -108,19 +108,22 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
         A_series_1 = [treatment_assignment(x_series, t, overlap).reshape(sampleSize, 1) for t in range(0, max_time)]
         A_series_1 = np.concatenate(A_series_1, 1)
         A_series_1 = A_series_1.reshape(sampleSize, max_time, 1)
-        train_x_1 = np.append(A_series_1, x_series,2)
+        train_x_1 = np.append(A_series_1, x_series, 2)
 
-        #plt.plot(A_series_1[:,:,0].T, alpha = 0.01, color = 'blue')
-        #plt.show()
-        #hazard
-        beta = confound # confound = 0.1; max_time = 30
-        hazard = (beta * train_x[:,:,0] + np.mean(train_x[:,:,1:], 2) ) / (scale*5)
-        hazard0 = (np.mean(train_x[:,:,1:], 2)) / (scale)
-        hazard1 = (beta * train_x_1[:,:,0] + np.mean(train_x_1[:,:,1:], 2)) / (scale*5)
+        # plt.plot(A_series_1[:,:,0].T, alpha = 0.01, color = 'blue')
+        # plt.show()
+        # hazard
+        beta = confound  # confound = 0.1; max_time = 30
 
+        np.mean(np.mean(train_x[:, :, 1:], 2))
+        np.mean(np.mean(train_x[:, :, 0], 1))
 
-        #plt.plot(np.mean(hazard,0), color = 'blue')
-        #plt.show()
+        hazard = (beta * train_x[:, :, 0] + np.mean(train_x[:, :, 1:], 2)) / (scale * 5)
+        hazard0 = (np.mean(train_x[:, :, 1:], 2)) / (scale * 5)
+        hazard1 = (beta * train_x_1[:, :, 0] + np.mean(train_x_1[:, :, 1:], 2)) / (scale * 5)
+
+        # plt.plot(np.mean(hazard,0), color = 'blue')
+        # plt.show()
 
         trueSurv = np.exp(- hazard)
         trueSurv_1 = np.exp(- hazard1)
@@ -177,8 +180,8 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
     train_df = pd.DataFrame(np.concatenate(train_x,0))
     train_df.columns = np.arange(0,len( train_df.columns )).astype(str)
     train_df = train_df.rename(columns={"0": "A"})
-    train_df['T'] = np.repeat(np.arange(0,30,1).reshape(-1,1), sampleSize, 1).T.reshape(-1)
-    train_df['ID'] = np.repeat(np.arange(0,sampleSize,1), max_time)
+    train_df['T'] = np.repeat(np.arange(0, max_time, 1).reshape(-1, 1), sampleSize, 1).T.reshape(-1)
+    train_df['ID'] = np.repeat(np.arange(0, sampleSize, 1), max_time)
     #train_df['Delta'] = event * 1.0
     full_df = train_df.copy()
 
@@ -217,7 +220,7 @@ def LDataSimu(seed = 1234, sampleSize=500, max_time=30, simu_dim=10, scale=1,ove
         kmf.fit(time, event_observed=event * 1.)
         plt.plot(kmf.survival_function_.index.values, kmf.survival_function_.KM_estimate, '.', color='k', label="KM")
         plt.plot(range(trueSurv.shape[1]), np.mean(np.cumprod(trueSurv, 1), 0), '-', color="#448396")
-        plt.xlim([0, 30])
+        plt.xlim([0, max_time])
         plt.ylim([0, 1])
         plt.legend()
         plt.show()
@@ -363,21 +366,22 @@ def dataset_normalize(_dataset, all_x_add):
 
 
 class DataGenerator(tf.keras.utils.Sequence):
-        def __init__(self, data, batch_size=32, shuffle=True):
-            'Initialization'
-            self.rnn_x, self.rnn_m, self.rnn_s, self.rnn_y,_  = data
-            self.batch_size = batch_size
-            self.shuffle = shuffle
+    def __init__(self, data, window, batch_size=32, shuffle=True):
+        'Initialization'
+        self.rnn_x, self.rnn_m, self.rnn_s, self.rnn_y, _ = data
+        self.batch_size = batch_size
+        self.shuffle = shuffle
 
-            self.rnn_x0 = self.rnn_x.copy()
-            self.rnn_x0[:, :, 0] = 0
-            self.rnn_x1 = self.rnn_x.copy()
-            self.rnn_x1[:, :, 0] = 1
+        self.rnn_x0 = self.rnn_x.copy()
+        self.rnn_x0[:, :, 0] = 0
+        self.rnn_x1 = self.rnn_x.copy()
+        self.rnn_x1[:, :, 0] = 1
 
             self.rnn_m0 = self.rnn_m.copy()
             self.rnn_m1 = self.rnn_m.copy()
             self.rnn_m0[self.rnn_x[:, :, 0]==0] = -1
-            self.rnn_m1[self.rnn_x[:, :, 0]==1] = -1
+        self.rnn_m1[self.rnn_x[:, :, 0] == 1] = -1
+        self.window = window
 
             self.on_epoch_end()
 
@@ -417,15 +421,15 @@ class DataGenerator(tf.keras.utils.Sequence):
             # Initialization
             index = np.concatenate([indexes1, indexes0])
 
-            X = [self.rnn_x[index,:, 1:], self.rnn_m[index,:, 1:],
+            X = [self.rnn_x[index, :, 1:], self.rnn_m[index, :, 1:],
                  self.rnn_x[index], self.rnn_m[index], self.rnn_s[index],
                  self.rnn_x0[index], self.rnn_x1[index],
                  self.rnn_m0[index], self.rnn_m1[index]]
 
-            #y_temp = np.concatenate([self.rnn_y[index], self.rnn_x[index, 0:1, 0]], axis=1)
-            y = np.concatenate([self.rnn_y[index],self.rnn_y[index]], axis=1 )
-            y[self.rnn_x[index,0:1,0].reshape(-1) == 0, 40: ] = -10
-            y[self.rnn_x[index,0:1,0].reshape(-1) == 1, 0:40] = -10
+            # y_temp = np.concatenate([self.rnn_y[index], self.rnn_x[index, 0:1, 0]], axis=1)
+            y = np.concatenate([self.rnn_y[index], self.rnn_y[index]], axis=1)
+            y[self.rnn_x[index, 0:1, 0].reshape(-1) == 0, self.window * 2:] = -10
+            y[self.rnn_x[index, 0:1, 0].reshape(-1) == 1, 0:self.window * 2] = -10
 
             return X, y
 

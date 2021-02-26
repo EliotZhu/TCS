@@ -9,46 +9,69 @@ from tensorflow.keras import backend as K
 
 def surv_likelihood_lrnn(window_size, alpha, beta, gamma, mask_value = -10):
     def loss(y_true, y_pred):
+        def partial_loss(y_true_1, y_true_0, y_pred_1, y_pred_0):
+            mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
+            mask1 = 1 - K.cast(mask1, K.floatx())
+            mask0 = K.equal(y_true_0[:, 0:window_size], mask_value)
+            mask0 = 1 - K.cast(mask0, K.floatx())
 
-        def partial_loss(y_true_temp, y_pred_temp):
-            mask = K.equal(y_true_temp[:, 0:window_size], mask_value)
-            mask = 1 - K.cast(mask, K.floatx())
-            cens_uncens = 1. + (y_pred_temp - 1.) * y_true_temp[:, 0:window_size]* mask  # component for all patients
-            uncens = 1. - y_pred_temp * y_true_temp[:, window_size:2 * window_size]* mask   # component for uncensored patients
-            loss_1 = K.sum(-K.log(K.clip(K.concatenate( (cens_uncens, uncens) ), K.epsilon(), None)),-1)  # return -log likelihood
-            return loss_1
+            y_pred = y_pred_1 * mask1 + y_pred_0 * mask0
+            y_true_p1 = y_true_1[:, 0:window_size] * mask1 + y_true_0[:, 0:window_size] * mask0
+            y_true_p2 = y_true_1[:, window_size:2 * window_size] * mask1 + \
+                        y_true_0[:, window_size:2 * window_size] * mask0
 
-        def debias_loss(y_true_temp, y_pred_temp, propensity_temp, D = 1.0):
-            mask = K.equal(y_true_temp[:, 0:window_size], mask_value)
-            mask = 1 - K.cast(mask, K.floatx())
+            cens_uncens = 1. + (y_pred - 1.) * y_true_p1  # component for all patients
+            uncens = 1. - y_pred * y_true_p2  # component for uncensored patients
+            loss = K.sum(-K.log(K.clip(K.concatenate((cens_uncens, uncens)), K.epsilon(), None)),
+                         -1)  # return -log likelihood
 
-            mse = K.mean((y_true_temp[:, 0:window_size]*mask - y_pred_temp*mask )**2 * propensity_temp)
-            loss = (mse) /K.mean(propensity_temp * (1.0-propensity_temp))
             return loss
 
-        def rank_loss(y_true_temp, y_pred_temp):
-            mask = K.equal(y_true_temp[:, 0:window_size], mask_value)
-            mask = 1 - K.cast(mask, K.floatx())
+        def debias_loss(y_true_1, y_true_0, y_pred_1, y_pred_0, propensity_temp, D=1.0):
+            mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
+            mask1 = 1 - K.cast(mask1, K.floatx())
+
+            mask0 = K.equal(y_true_0[:, 0:window_size], mask_value)
+            mask0 = 1 - K.cast(mask0, K.floatx())
+
+            loss1 = K.mean((y_pred_1 * mask1 - y_pred_0 * mask1) ** 2)
+            loss2 = K.mean((y_pred_1 * mask0 - y_pred_0 * mask0) ** 2)
+
+            ##mse = K.mean((y_true_temp[:, 0:window_size]*mask - y_pred_temp*mask )**2)# * propensity_temp)
+            ##loss = (mse)# /K.mean(propensity_temp * (1.0-propensity_temp))
+            return loss1 - loss2
+
+        def rank_loss(y_true_1, y_true_0, y_pred_1, y_pred_0):
+            mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
+            mask1 = 1 - K.cast(mask1, K.floatx())
+            mask0 = K.equal(y_true_0[:, 0:window_size], mask_value)
+            mask0 = 1 - K.cast(mask0, K.floatx())
+
+            y_pred = y_pred_1 * mask1 + y_pred_0 * mask0
+            y_true_p1 = y_true_1[:, 0:window_size] * mask1 + y_true_0[:, 0:window_size] * mask0
+            y_true_p2 = y_true_1[:, window_size:2 * window_size] * mask1 + \
+                        y_true_0[:, window_size:2 * window_size] * mask0
+
             # Rank loss
-            R = K.dot(y_pred_temp*mask, K.transpose(y_true_temp[:, 0:window_size]*mask ))  # N*N
+            R = K.dot(y_pred, K.transpose(y_true_p1))  # N*N
             diag_R = K.reshape(tf.linalg.diag_part(R), (-1, 1))  # N*1
             one_vector = tf.ones(K.shape(diag_R))  # N*1
             R = K.dot(one_vector, K.transpose(diag_R)) - R  # r_{i}(T_{j}) - r_{j}(T_{j})
             R = K.transpose(R)  # r_{i}(T_{i}) - r_{j}(T_{i})
 
-            I2 = K.reshape(K.sum(y_true_temp[:, window_size:2 * window_size]*mask, axis=1), (-1, 1))  # N*1
+            I2 = K.reshape(K.sum(y_true_p2, axis=1), (-1, 1))  # N*1
             I2 = K.cast(K.equal(I2, 1), dtype=tf.float32)
             I2 = K.dot(one_vector, K.reshape(I2, (1, -1)))
-            T2 = K.reshape(K.sum(y_true_temp[:, 0:window_size]*mask, axis=1), (-1, 1))  # N*1
+            T2 = K.reshape(K.sum(y_true_p1, axis=1), (-1, 1))  # N*1
 
             T = K.relu( K.sign(K.dot(one_vector, K.transpose(T2)) - K.dot(T2, K.transpose(one_vector))))  # (Ti(t)>Tj(t)=1); N*N
             T = I2 * T  # only remains T_{ij}=1 when event occured for subject i 1*N
 
             eta = T * K.exp(-R / 0.1)
             eta = T * K.cast(eta >= T, dtype=tf.float32)
-            loss_2 = 1 - K.sum(eta) / (1 + K.sum(T))
+            loss = 1 - K.sum(eta) / (1 + K.sum(T))
 
-            return  loss_2 #+ brier_score
+            return loss  # + brier_score
 
         propensity = y_pred[:, 2, :]
         y_pred1 = y_pred[:, 0, :]
@@ -56,21 +79,16 @@ def surv_likelihood_lrnn(window_size, alpha, beta, gamma, mask_value = -10):
 
         propensity_1 = 1.0 - K.clip(propensity, 0.0001, 1.0)
 
+        partial_loss = partial_loss(y_true[:, 0:window_size * 2],
+                                    y_true[:, window_size * 2:window_size * 4], y_pred1, y_pred0)
 
-        partial_loss1 = partial_loss(y_true[:, 0:window_size*2], y_pred1)
-        partial_loss2 = partial_loss(y_true[:, window_size*2:window_size*4], y_pred0)
+        rank_loss = rank_loss(y_true[:, 0:window_size * 2],
+                              y_true[:, window_size * 2:window_size * 4], y_pred1, y_pred0)
 
+        causal_loss3 = debias_loss(y_true[:, 0:window_size * 2], y_true[:, window_size * 2:window_size * 4], y_pred1,
+                                   y_pred0, propensity_1)
 
-        rank_loss1 = rank_loss(y_true[:, window_size*2:window_size*4], y_pred0)
-        rank_loss2 = rank_loss(y_true[:, 0:window_size*2], y_pred1)
-
-
-        debias_loss1 = debias_loss(y_true[:, 0:window_size*2], y_pred1, propensity_1)
-        debias_loss2 = debias_loss(y_true[:, window_size*2:window_size*4], y_pred0, propensity_1)
-        causal_loss3 = (debias_loss1+debias_loss2)/2 #+ K.abs(K.mean(y_pred0[y_true[:, -1] == 1]) - K.mean(y_pred0[y_true[:, -1] == 0]))
-
-
-        return alpha * (partial_loss1+partial_loss2) + beta * (rank_loss1+rank_loss2)  + causal_loss3 * gamma
+        return alpha * partial_loss + beta * rank_loss + causal_loss3 * gamma
 
     return loss
 

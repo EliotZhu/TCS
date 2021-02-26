@@ -11,7 +11,7 @@ from utilss.data_handler import LDataSimu, build_data_surv_rnn
 ##########################################################
 # Data Simulation
 def get_data(input_dim=6, sampleSize=600, max_time=30, prediction_itvl=1,
-             history_itvl=14, overlap=1, seed=123, std=0.01, confound=0.5, scale=2):
+             history_itvl=14, overlap=1, seed=123, std=0.1, confound=0.5, scale=2):
     df, df_full, surv_func_wrapper = LDataSimu(seed, sampleSize=sampleSize, max_time=max_time,
                                                simu_dim=input_dim, scale=scale, overlap=overlap,
                                                plot=False, std=std, confound=confound)
@@ -21,7 +21,7 @@ def get_data(input_dim=6, sampleSize=600, max_time=30, prediction_itvl=1,
     # scale = 10  10%
     # scale = 20  5%
     # scale = 100  1%
-    #scale = 500  0.05%
+    # scale = 500  0.05%
 
 
     id_set = np.unique(df['ID'])
