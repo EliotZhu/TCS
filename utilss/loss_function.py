@@ -28,18 +28,28 @@ def surv_likelihood_lrnn(window_size, alpha, beta, gamma, mask_value = -10):
             return loss
 
         def debias_loss(y_true_1, y_true_0, y_pred_1, y_pred_0, propensity_temp, D=1.0):
+            # mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
+            # mask1 = 1 - K.cast(mask1, K.floatx())
+            #
+            # mask0 = K.equal(y_true_0[:, 0:window_size], mask_value)
+            # mask0 = 1 - K.cast(mask0, K.floatx())
+            #
+            # loss1 = K.mean((y_pred_1 * mask1 - y_pred_0 * mask1) ** 2)
+            # loss2 = K.mean((y_pred_1 * mask0 - y_pred_0 * mask0) ** 2)
             mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
             mask1 = 1 - K.cast(mask1, K.floatx())
-
             mask0 = K.equal(y_true_0[:, 0:window_size], mask_value)
             mask0 = 1 - K.cast(mask0, K.floatx())
 
-            loss1 = K.mean((y_pred_1 * mask1 - y_pred_0 * mask1) ** 2)
-            loss2 = K.mean((y_pred_1 * mask0 - y_pred_0 * mask0) ** 2)
+            y_pred = y_pred_1 * mask1 + y_pred_0 * mask0
+            y_true_p1 = y_true_1[:, 0:window_size] * mask1 + y_true_0[:, 0:window_size] * mask0
+            y_true_p2 = y_true_1[:, window_size:2 * window_size] * mask1 + \
+                        y_true_0[:, window_size:2 * window_size] * mask0
 
-            ##mse = K.mean((y_true_temp[:, 0:window_size]*mask - y_pred_temp*mask )**2)# * propensity_temp)
-            ##loss = (mse)# /K.mean(propensity_temp * (1.0-propensity_temp))
-            return loss1 - loss2
+            loss = K.mean((y_pred_1 * mask1 - y_pred_0 * mask0)**2)# * propensity_temp)
+            # /K.mean(propensity_temp * (1.0-propensity_temp))
+
+            return loss
 
         def rank_loss(y_true_1, y_true_0, y_pred_1, y_pred_0):
             mask1 = K.equal(y_true_1[:, 0:window_size], mask_value)
