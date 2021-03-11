@@ -11,6 +11,5 @@ license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://openso
 **Authors:** [Jie Zhu](https://scholar.google.com/citations?user=Cw5v2f4AAAAJ&hl=en) and
 [Blanca Gallego](https://cbdrh.med.unsw.edu.au/people/associate-professor-blanca-gallego-luxan)
 
-Causal inference in longitudinal observational health data often requires the accurate estimation of treatment effects on time-to-event outcomes in the presence of time-varying covariates. To tackle this sequential treatment effect estimation problem, we have developed a causal dynamic survival model (CDSM) that uses the potential outcomes framework with the Bayesian recurrent sub-networks to estimate the difference in survival curves. Using simulated survival datasets, CDSM has shown good causal effect estimation performance across scenarios of sample dimension, event rate, confounding and overlapping. However, we found increasing the sample size is not effective if the original data is highly confounded or with low level of overlapping. In two large clinical cohort studies, our model identified the expected conditional average treatment effect and detected individual effect heterogeneity over time and patient subgroups. The model provides individualized absolute treatment effect estimations that could be used in recommendation systems.
 
-Please see sample.ipynb for examples. 
+Please see Causal Inference.ipynb for examples on treatment effect estimations and Dynamic Prediction.ipynb for examples on survival curve predictions. 
