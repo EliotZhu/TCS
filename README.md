@@ -1,4 +1,4 @@
-# CDSM - Casual Inference using Deep Bayesian Dynamic Survival Models}
+# CDS - Casual Inference with Deep Survival Model and Time-varying Covariates}
 {Zhu and Gallego
 
 [![Project Status: Active – The project has reached a stable, usable
