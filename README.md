@@ -12,4 +12,4 @@ license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://openso
 [Blanca Gallego](https://cbdrh.med.unsw.edu.au/people/associate-professor-blanca-gallego-luxan)
 
 
-Please see Causal Inference.ipynb for examples on treatment effect estimations and Dynamic Prediction.ipynb for examples on survival curve predictions. 
+Please see Causal Inference.ipynb for examples of the proposed model. 
