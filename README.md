@@ -1,4 +1,4 @@
-# Casual Inference using Deep Bayesian Dynamic Survival Model (CDS)}
+# Casual Inference using Deep Bayesian Dynamic Survival Model (CDS)
 {Zhu and Gallego
 
 [![Project Status: Active – The project has reached a stable, usable
