@@ -1,11 +1,9 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
 tfkl = tf.keras.layers
 tfkr = tf.keras.regularizers
 import kerastuner as kt
-from tqdm import tqdm
 
 from tensorflow.keras.callbacks import EarlyStopping
 from utilss.loss_function import surv_likelihood_lrnn
@@ -149,7 +147,7 @@ def fit_model(model, max_time, simu_dim, history_itvl, train, val):
     best_hyperparameters_x = tuner.get_best_hyperparameters(1)[0]
     train_gen = DataGenerator(data, batch_size=best_hyperparameters_x.values['batch_size'])
     best_outcome_model = []
-    for i in (range(15)):
+    for i in (range(20)):
         print('.', end='')
         best_outcome_model_x = tuner.hypermodel.build(best_hyperparameters_x)
         early_stopping = EarlyStopping(monitor='loss', patience=2)
