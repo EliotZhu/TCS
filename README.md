@@ -1,4 +1,4 @@
-# Casual Inference using Deep Bayesian Dynamic Survival Model (CDS)
+# CDS--Causal Inference with Deep Survival Model and Time-varying Covariates
 
 
 [![Project Status: Active – The project has reached a stable, usable
